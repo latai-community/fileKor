@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filekor"
+version = "0.1.0"
+description = "PDF metadata extraction CLI using PyExifTool"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "filekor maintainer"}
+]
+dependencies = [
+    "click>=8.1.0",
+    "pydantic>=2.0.0",
+    "pyexiftool>=0.5.0",
+]
+
+[project.scripts]
+filekor = "filekor.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
