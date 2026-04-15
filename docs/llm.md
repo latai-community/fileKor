@@ -1,6 +1,6 @@
 # LLM-based Labeling
 
-fileKor uses an LLM (Google Gemini) to extract labels based on file content. LLM must be configured before use.
+fileKor uses LLM providers to extract labels based on file content. Supported providers: Google Gemini, OpenAI, Groq, and OpenRouter. LLM must be configured before use.
 
 ## Config File Search Order
 
@@ -13,7 +13,7 @@ The tool searches for `config.yaml` in this order:
 
 ## Setup
 
-### 1. Create config file
+### Google Gemini (Default)
 
 Create `~/.filekor/config.yaml`:
 
@@ -27,8 +27,7 @@ filekor:
     max_content_chars: 1500
 ```
 
-### 2. Set environment variable
-
+Set environment variable:
 ```bash
 # Windows
 setx GOOGLE_API_KEY "your-api-key-here"
@@ -37,17 +36,77 @@ setx GOOGLE_API_KEY "your-api-key-here"
 export GOOGLE_API_KEY="your-api-key-here"
 ```
 
-Or use `${VAR}` syntax in config.yaml to set directly from environment.
+### OpenAI
+
+Create `~/.filekor/config.yaml`:
+
+```yaml
+filekor:
+  llm:
+    enabled: true
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    max_content_chars: 1500
+```
+
+Set environment variable:
+```bash
+# Windows
+setx OPENAI_API_KEY "your-api-key-here"
+
+# Linux/Mac
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+### Groq
+
+Create `~/.filekor/config.yaml`:
+
+```yaml
+filekor:
+  llm:
+    enabled: true
+    provider: groq
+    api_key: ${GROQ_API_KEY}
+    model: llama-3.1-8b-instant
+    max_content_chars: 1500
+```
+
+### OpenRouter
+
+Create `~/.filekor/config.yaml`:
+
+```yaml
+filekor:
+  llm:
+    enabled: true
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    model: deepseek/deepseek-chat-v3-0324:free
+    max_content_chars: 1500
+```
+
+**Note:** Use `${VAR}` syntax in config.yaml to load API keys from environment variables.
 
 ## Configuration Options
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
 | enabled | Yes | false | Enable LLM labeling |
-| provider | No | gemini | LLM provider (gemini, mock) |
+| provider | No | gemini | LLM provider (gemini, openai, groq, openrouter, mock) |
 | api_key | Yes | - | API key for the provider |
-| model | No | gemini-2.0-flash | Model identifier |
+| model | No | Provider-specific | Model identifier (see provider defaults below) |
 | max_content_chars | No | 1500 | Max chars sent to LLM |
+
+### Provider Defaults
+
+| Provider | Default Model | Base URL / API |
+|----------|---------------|----------------|
+| gemini | gemini-2.0-flash | Google AI Studio |
+| openai | gpt-4o-mini | api.openai.com |
+| groq | llama-3.1-8b-instant | api.groq.com |
+| openrouter | deepseek/deepseek-chat-v3-0324:free | openrouter.ai |
 
 ## Usage
 
@@ -113,3 +172,20 @@ This returns dummy labels for testing the workflow.
 ## API Keys
 
 - **Google Gemini**: Get your API key at https://aistudio.google.com/app/apikey
+- **OpenAI**: Get your API key at https://platform.openai.com/api-keys
+- **Groq**: Get your API key at https://console.groq.com/keys
+- **OpenRouter**: Get your API key at https://openrouter.ai/keys
+
+## Requirements
+
+Install the `openai` package for OpenAI, Groq, and OpenRouter providers:
+
+```bash
+uv pip install openai
+```
+
+For Google Gemini, install:
+
+```bash
+uv pip install google-genai
+```

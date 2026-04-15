@@ -172,6 +172,82 @@ Return ONLY the labels as comma-separated list, nothing else. If no labels apply
         return valid_labels
 
 
+class OpenAIProvider(LLMProvider):
+    """OpenAI provider for GPT models."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gpt-4o-mini",
+    ):
+        """Initialize OpenAI provider.
+
+        Args:
+            api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
+            model: Model name to use (default: gpt-4o-mini).
+        """
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.model = model
+
+    def extract_labels(
+        self,
+        content: str,
+        taxonomy: Dict[str, List[str]],
+    ) -> List[str]:
+        """Extract labels using OpenAI.
+
+        Args:
+            content: Text content to analyze.
+            taxonomy: Dict mapping label names to synonym lists.
+
+        Returns:
+            List of suggested labels.
+        """
+        if not self.api_key:
+            raise ValueError(
+                "API key required. Set OPENAI_API_KEY env var or pass api_key."
+            )
+
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise ImportError("openai package required. pip install openai")
+
+        client = OpenAI(api_key=self.api_key)
+
+        # Build taxonomy context
+        taxonomy_lines = []
+        for label, synonyms in taxonomy.items():
+            synonyms_str = ", ".join(synonyms)
+            taxonomy_lines.append(f"- {label}: {synonyms_str}")
+        taxonomy_str = "\n".join(taxonomy_lines)
+
+        prompt = f"""Based on the following file content, suggest 1-5 taxonomy labels from this list:
+
+{taxonomy_str}
+
+Content:
+{content}
+
+Return ONLY the labels as comma-separated list, nothing else. If no labels apply, return "none"."""
+
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=50,
+        )
+
+        text = response.choices[0].message.content.strip().lower()
+
+        if text == "none" or not text:
+            return []
+
+        labels = [label.strip() for label in text.split(",")]
+        valid_labels = [label for label in labels if label in taxonomy]
+
+        return valid_labels
+
+
 class OpenRouterProvider(LLMProvider):
     """OpenRouter provider - gateway to 200+ free models."""
 
@@ -275,9 +351,9 @@ def get_provider(
     """Get LLM provider instance.
 
     Args:
-        provider_name: Provider name (gemini, groq, openrouter, mock).
+        provider_name: Provider name (gemini, groq, openai, openrouter, mock).
         api_key: API key for the provider.
-        model: Model name (for Gemini, Groq, OpenRouter).
+        model: Model name (for Gemini, Groq, OpenAI, OpenRouter).
 
     Returns:
         LLMProvider instance.
@@ -286,6 +362,8 @@ def get_provider(
         return GoogleProvider(api_key=api_key, model=model or "gemini-2.0-flash")
     elif provider_name == "groq":
         return GroqProvider(api_key=api_key, model=model or "llama-3.1-8b-instant")
+    elif provider_name == "openai":
+        return OpenAIProvider(api_key=api_key, model=model or "gpt-4o-mini")
     elif provider_name == "openrouter":
         return OpenRouterProvider(
             api_key=api_key, model=model or "deepseek/deepseek-chat-v3-0324:free"

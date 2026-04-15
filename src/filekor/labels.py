@@ -229,7 +229,7 @@ class LLMConfig:
 
         Args:
             enabled: Whether LLM label extraction is enabled.
-            provider: LLM provider name (gemini, mock).
+            provider: LLM provider name (gemini, groq, openai, openrouter, mock).
             model: Model name to use.
             api_key: API key for the provider.
             max_content_chars: Maximum characters to send to LLM.

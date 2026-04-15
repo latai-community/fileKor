@@ -44,7 +44,7 @@ Enable auto-sync in `config.yaml` to automatically update the database when usin
 
 - **Metadata Extraction** - Extract metadata from PDF, TXT, MD files using PyExifTool
 - **Text Extraction** - Extract and summarize text content from supported files
-- **LLM-based Labeling** - Classify files using LLM (Gemini) with content analysis
+- **LLM-based Labeling** - Classify files using LLM (Gemini, OpenAI, Groq, OpenRouter)
 - **Sidecar Generation** - Generate YAML sidecar files (.kor) with full metadata
 - **Database Sync** - Sync .kor files to SQLite database
 - **Database Indexing** - SQLite backend for querying files by labels
