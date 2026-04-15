@@ -18,7 +18,7 @@ source .venv/bin/activate
 |---------|-------------|
 | `extract` | Extract text content from supported files |
 | `sidecar` | Generate .kor sidecar file with metadata |
-| `labels` | Suggest taxonomy labels |
+| `labels` | Add taxonomy labels to a file |
 | `process` | Legacy - extract metadata |
 
 ---
@@ -28,89 +28,90 @@ source .venv/bin/activate
 Extract text content from PDF, TXT, or MD files.
 
 ```bash
-# Extract to stdout
-filekor extract documento.pdf
+filekor extract <path>
 
 # Extract to file
-filekor extract documento.pdf -o extracted.txt
+filekor extract <path> -o <output>
 
 # Show help
 filekor extract --help
 ```
 
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o`, `--output` | Output file path |
+
 ---
 
 ## Sidecar
 
-Generate a `.kor` YAML sidecar file with full metadata.
+Generate a `.kor` YAML sidecar file with metadata.
 
 ```bash
-# Generate sidecar (same directory)
-filekor sidecar documento.pdf
+filekor sidecar <path>
 
 # Custom output path
-filekor sidecar documento.pdf -o metadata.kor
+filekor sidecar <path> -o <output>
 
-# Custom config.yaml for LLM
-filekor sidecar documento.pdf --config /path/to/config.yaml
+# Force regeneration (ignore existing .kor)
+filekor sidecar <path> --no-cache
 
-# Force regeneration
-filekor sidecar documento.pdf --no-cache
+# Custom config.yaml for LLM (if needed in future)
+filekor sidecar <path> -c <config.yaml>
+
+# Verbose output
+filekor sidecar <path> --verbose
 ```
 
-### Sidecar Output Format
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o`, `--output` | Output .kor file path |
+| `--no-cache` | Force regeneration |
+| `-c`, `--config` | Custom config.yaml path |
+| `-v`, `--verbose` | Show detailed output |
 
-```yaml
-version: "1.0"
-file:
-  path: /path/to/documento.pdf
-  name: documento.pdf
-  extension: .pdf
-  size_bytes: 12345
-  modified_at: "2026-04-14T10:30:00Z"
-  hash_sha256: "abc123..."
-metadata:
-  author: "John Doe"
-  created: "2026-04-01"
-  pages: 5
-content:
-  language: en
-  word_count: 1500
-  page_count: 5
-labels:
-  suggested:
-    - documentation
-    - legal
-  source: llm
-parser_status: OK
-generated_at: "2026-04-14T10:30:00Z"
-```
+**Output:** Creates `{filename}.kor` in same directory.
 
 ---
 
 ## Labels
 
-Suggest taxonomy labels for a file using LLM.
+Add taxonomy labels to a file using LLM. Creates or updates `.kor` file.
 
 ```bash
-# Suggest labels
-filekor labels documento.pdf
+filekor labels <path>
 
-# Custom taxonomy config (labels.properties)
-filekor labels documento.pdf --config custom-labels.properties
+# With custom config.yaml for LLM
+filekor labels <path> --llm-config <config.yaml>
 
-# Custom LLM config (config.yaml)
-filekor labels documento.pdf --llm-config /path/to/config.yaml
+# With custom taxonomy (labels.properties)
+filekor labels <path> -c <labels.properties>
 
-# Show help
-filekor labels --help
+# Verbose output
+filekor labels <path> --verbose
 ```
 
-### Output Example
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-c`, `--config` | Custom labels.properties path |
+| `--llm-config` | Custom config.yaml path |
+| `-v`, `--verbose` | Show detailed output |
 
+**Behavior:**
+- If `.kor` exists: loads it and adds/replaces labels
+- If `.kor` does NOT exist: creates new `.kor` with file info and labels
+- LLM is required (will fail if not configured)
+
+**Output Example:**
 ```
 documentation
-legal
+testing
+code
+Loading existing: documento.kor
+Saved: documento.kor
 ```
 
 ---
@@ -120,8 +121,14 @@ legal
 Legacy command for metadata extraction.
 
 ```bash
-filekor process documento.pdf --output metadata.kor
+filekor process <path>
+filekor process <path> --output <output>
 ```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o`, `--output` | Output file path |
 
 ---
 
@@ -133,3 +140,36 @@ filekor process documento.pdf --output metadata.kor
 | 1 | ExifTool not found or unsupported file |
 | 2 | File not found |
 | 3 | Permission denied |
+
+---
+
+## Examples
+
+### Full workflow
+
+```bash
+# 1. Generate sidecar (without labels)
+filekor sidecar documento.pdf --no-cache
+# Output: documento.kor (labels: null)
+
+# 2. Add labels
+filekor labels documento.pdf
+# Output: documento.kor (labels: [documentation, testing])
+
+# 3. View the .kor file
+cat documento.kor
+```
+
+### With custom configs
+
+```bash
+# Use custom LLM config
+filekor labels documento.pdf --llm-config /path/to/config.yaml
+
+# Use custom taxonomy
+filekor labels documento.pdf -c /path/to/labels.properties
+
+# Verbose mode to see what's happening
+filekor sidecar documento.pdf --verbose
+filekor labels documento.pdf --verbose
+```
