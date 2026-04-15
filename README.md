@@ -75,7 +75,8 @@ Enable auto-sync in `config.yaml` to automatically update the database when usin
 | Guide | Description |
 |-------|-------------|
 | [Installation](docs/installation.md) | Setup and installation |
-| [Usage](docs/usage.md) | CLI commands and Library API reference |
+| [Usage](docs/usage.md) | CLI commands reference |
+| [Library](docs/library.md) | Python Library API with code examples |
 | [Taxonomy](docs/taxonomy.md) | Labels and taxonomy configuration |
 | [LLM](docs/llm.md) | LLM provider setup (Gemini, OpenAI, Groq, OpenRouter) |
 | [Development](docs/development.md) | Development and testing guide |

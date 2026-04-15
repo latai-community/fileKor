@@ -7,7 +7,8 @@ Local metadata engine that extracts, summarizes, classifies, and tags files usin
 | Section | Description |
 |---------|-------------|
 | [Installation](installation.md) | Setup and installation guide |
-| [Usage](usage.md) | CLI commands and Library API |
+| [Usage](usage.md) | CLI commands reference |
+| [Library](library.md) | Python Library API with examples |
 | [Taxonomy](taxonomy.md) | Labels configuration |
 | [LLM](llm.md) | LLM-based labeling setup (Gemini, OpenAI, Groq, OpenRouter) |
 | [Development](development.md) | Development guide |
