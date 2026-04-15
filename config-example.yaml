@@ -1,0 +1,7 @@
+filekor:
+  llm:
+    enabled: true
+    provider: 
+    api_key: 
+    model: 
+    max_content_chars: 1500
