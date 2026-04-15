@@ -17,6 +17,7 @@ uv pip install -e .
 filekor extract documento.pdf
 filekor sidecar documento.pdf
 filekor labels documento.pdf
+filekor sync documento.kor          # Sync existing .kor to database
 ```
 
 ## Library Usage
@@ -45,6 +46,7 @@ Enable auto-sync in `config.yaml` to automatically update the database when usin
 - **Text Extraction** - Extract and summarize text content from supported files
 - **LLM-based Labeling** - Classify files using LLM (Gemini) with content analysis
 - **Sidecar Generation** - Generate YAML sidecar files (.kor) with full metadata
+- **Database Sync** - Sync .kor files to SQLite database
 - **Database Indexing** - SQLite backend for querying files by labels
 - **Library API** - Use filekor as a Python library
 - **CLI Interface** - Simple command-line interface with multiple commands
@@ -54,7 +56,7 @@ Enable auto-sync in `config.yaml` to automatically update the database when usin
 | Guide | Description |
 |-------|-------------|
 | [Installation](docs/installation.md) | Setup and installation |
-| [Usage](docs/usage.md) | CLI commands reference |
+| [Usage](docs/usage.md) | CLI commands reference (extract, sidecar, labels, sync, status) |
 | [Taxonomy](docs/taxonomy.md) | Labels configuration |
 | [LLM](docs/llm.md) | LLM setup |
 | [Development](docs/development.md) | Developer guide |
