@@ -315,32 +315,73 @@ Return ONLY the labels as comma-separated list, nothing else. If no labels apply
 
 
 class MockProvider(LLMProvider):
-    """Mock provider for testing without API calls."""
+    """Mock provider for testing without API calls.
 
-    def __init__(self, labels: Optional[List[str]] = None):
+    Simulates a real LLM provider by returning predefined labels based on content keywords.
+    Useful for testing the complete pipeline without API costs or network calls.
+
+    Examples:
+        # Basic mock - returns default labels
+        provider = MockProvider()
+
+        # Custom labels
+        provider = MockProvider(labels=["finance", "invoice"])
+
+        # Content-aware mock - matches keywords to labels
+        provider = MockProvider(content_rules={
+            "budget": "finance",
+            "contract": "legal",
+            "invoice": "finance",
+        })
+    """
+
+    def __init__(
+        self,
+        labels: Optional[List[str]] = None,
+        content_rules: Optional[Dict[str, str]] = None,
+        default_labels: Optional[List[str]] = None,
+    ):
         """Initialize mock provider.
 
         Args:
-            labels: Labels to return (default: ["documentation"]).
+            labels: Static labels to return (default: ["documentation"]).
+            content_rules: Dict mapping content keywords to labels.
+                If content contains keyword, returns that label.
+            default_labels: Labels to return when no rules match.
         """
-        self.labels = labels or ["documentation"]
+        self.labels = labels
+        self.content_rules = content_rules or {}
+        self.default_labels = default_labels or ["documentation"]
 
     def extract_labels(
         self,
         content: str,
         taxonomy: Dict[str, List[str]],
     ) -> List[str]:
-        """Return mock labels.
+        """Return mock labels based on content or static configuration.
 
         Args:
-            content: Text content (ignored).
+            content: Text content to analyze (lowercased for matching).
             taxonomy: Dict mapping label names to synonym lists.
 
         Returns:
-            Mock labels.
+            Mock labels filtered to valid taxonomy entries.
         """
-        # Return first few valid labels for testing
-        return [label for label in self.labels if label in taxonomy][:3]
+        # If static labels configured, use those
+        if self.labels:
+            return [label for label in self.labels if label in taxonomy][:3]
+
+        # Otherwise, use content rules
+        content_lower = content.lower()
+        matched_labels = []
+
+        for keyword, label in self.content_rules.items():
+            if keyword.lower() in content_lower and label in taxonomy:
+                matched_labels.append(label)
+
+        # Return matched labels or defaults
+        result = matched_labels if matched_labels else self.default_labels
+        return [label for label in result if label in taxonomy][:3]
 
 
 def get_provider(
