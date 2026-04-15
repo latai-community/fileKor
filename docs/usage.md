@@ -19,6 +19,7 @@ source .venv/bin/activate
 | `extract` | Extract text content from supported files |
 | `sidecar` | Generate .kor sidecar file with metadata |
 | `labels` | Add taxonomy labels to a file |
+| `sync` | Sync .kor files to database |
 | `status` | Show status of .kor files |
 | `process` | Legacy - extract metadata |
 
@@ -274,6 +275,34 @@ files = query_by_label("finance")
 # Query all files
 all_files = db.query_all()
 ```
+
+---
+
+## Sync
+
+Synchronize existing `.kor` files to the database without regenerating or re-labeling them.
+
+```bash
+# Sync a single .kor file
+filekor sync document.kor
+
+# Sync all .kor files in a directory
+filekor sync ./docs/ --dir
+
+# Sync with verbose output
+filekor sync ./docs/ --dir --verbose
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-d`, `--dir` | Sync all .kor files in directory |
+| `-v`, `--verbose` | Show detailed output |
+
+**Use Cases:**
+- Sync existing .kor files to a new database
+- Re-sync after database corruption
+- Bulk sync files created before auto_sync was enabled
 
 ### Database Schema
 

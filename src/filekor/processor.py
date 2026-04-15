@@ -159,11 +159,14 @@ class DirectoryProcessor:
         Returns:
             List of ProcessResult for each file.
         """
-        # Find all supported files
+        # Find all supported files (excluding .filekor/ directories)
         pattern = "**/*" if recursive else "*"
         files = []
         for ext in SUPPORTED_EXTENSIONS:
             files.extend(directory.glob(f"{pattern}.{ext}"))
+
+        # Filter out files in .filekor/ directories
+        files = [f for f in files if ".filekor" not in f.parts]
 
         results: List[ProcessResult] = []
 

@@ -148,11 +148,19 @@ def _extract_directory(directory: str, output: Optional[str]) -> None:
         click.echo(f"Error: Not a directory: {directory}", err=True)
         sys.exit(1)
 
-    # Find all supported files
+    # Find all supported files (recursive, unique, excluding .filekor/ directories)
     files = []
     for ext in SUPPORTED_EXTENSIONS:
-        files.extend(dir_path.glob(f"*.{ext}"))
-        files.extend(dir_path.glob(f"**/*. {ext}"))  # For .md files
+        files.extend(dir_path.glob(f"**/*.{ext}"))
+
+    # Remove duplicates and exclude files in .filekor/ directories
+    seen = set()
+    unique_files = []
+    for f in files:
+        if f not in seen and ".filekor" not in f.parts:
+            seen.add(f)
+            unique_files.append(f)
+    files = unique_files
 
     if not files:
         click.echo(f"No supported files found in {directory}", err=True)
@@ -343,8 +351,10 @@ def sidecar(
     """
     if directory:
         _sidecar_directory(path, output, config, verbose, workers, watch)
+        return
     else:
         _sidecar_file(path, output, no_cache, config, verbose)
+        return
     # Load LLM config (if available)
     llm_config = LLMConfig.load(config) if config else LLMConfig.load()
 
@@ -598,13 +608,21 @@ def _sidecar_directory(
         labels_config=labels_config,
     )
 
-    # Find files
+    # Find files (recursive, unique, excluding .filekor/ directories)
     from filekor.processor import SUPPORTED_EXTENSIONS
 
     files = []
     for ext in SUPPORTED_EXTENSIONS:
-        files.extend(dir_path.glob(f"*.{ext}"))
         files.extend(dir_path.glob(f"**/*.{ext}"))
+
+    # Remove duplicates and exclude files in .filekor/ directories
+    seen = set()
+    unique_files = []
+    for f in files:
+        if f not in seen and ".filekor" not in f.parts:
+            seen.add(f)
+            unique_files.append(f)
+    files = unique_files
 
     if not files:
         console.print(f"[yellow]No supported files found in {directory}[/yellow]")
@@ -630,6 +648,9 @@ def _sidecar_directory(
             )
             if verbose:
                 console.print(f"[green]OK[/green] {result.file_path.name}")
+            # Auto-sync to database if enabled
+            if result.output_path:
+                _auto_sync_hook(result.output_path, llm_config, verbose)
         else:
             failed += 1
             emitter.error(str(result.file_path), result.error or "Unknown error")
@@ -831,13 +852,21 @@ def _labels_directory(
     # Create event emitter
     emitter = create_emitter(watch=watch)
 
-    # Find files
+    # Find files (recursive, unique, excluding .filekor/ directories)
     from filekor.processor import SUPPORTED_EXTENSIONS
 
     files = []
     for ext in SUPPORTED_EXTENSIONS:
-        files.extend(dir_path.glob(f"*.{ext}"))
         files.extend(dir_path.glob(f"**/*.{ext}"))
+
+    # Remove duplicates and exclude files in .filekor/ directories
+    seen = set()
+    unique_files = []
+    for f in files:
+        if f not in seen and ".filekor" not in f.parts:
+            seen.add(f)
+            unique_files.append(f)
+    files = unique_files
 
     if not files:
         console.print(f"[yellow]No supported files found in {directory}[/yellow]")
@@ -864,12 +893,18 @@ def _labels_directory(
                 llm_config=llm_config_obj,
             )
 
-            # Load or create sidecar
-            kor_path = file_path.with_suffix(".kor")
+            # Load or create sidecar (in .filekor/ subdirectory)
+            file_ext = file_path.suffix.lstrip(".").lower()
+            filekor_dir = file_path.parent / ".filekor"
+            kor_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
+
             if kor_path.exists():
                 sidecar = Sidecar.load(str(kor_path))
             else:
+                # Create sidecar with file info
                 sidecar = Sidecar.create(str(file_path), metadata=None, content=None)
+                # Ensure .filekor directory exists
+                filekor_dir.mkdir(parents=True, exist_ok=True)
 
             # Update labels
             sidecar.update_labels(suggestions)
@@ -888,14 +923,16 @@ def _labels_directory(
             file_path, success, labels, error = future.result()
             if success:
                 successful += 1
-                emitter.completed(
-                    str(file_path), str(file_path.with_suffix(".kor")), labels
+                # Get the kor_path (defined in process_file closure)
+                file_ext = file_path.suffix.lstrip(".").lower()
+                kor_path = (
+                    file_path.parent / ".filekor" / f"{file_path.stem}.{file_ext}.kor"
                 )
+                emitter.completed(str(file_path), str(kor_path), labels)
                 console.print(
                     f"[green]OK[/green] {file_path.name}: {', '.join(labels) if labels else 'no labels'}"
                 )
-                # Auto-sync to database if enabled
-                kor_path = file_path.with_suffix(".kor")
+                # Auto-sync to database if enabled (kor_path defined in process_file)
                 _auto_sync_hook(kor_path, llm_config_obj, verbose=False)
             else:
                 failed += 1
@@ -1048,6 +1085,85 @@ def _status_directory(directory: str, watch: bool) -> None:
             console.print(f"  - {f.name}")
 
     sys.exit(0)
+
+
+@cli.command()
+@click.argument("path", type=click.Path(exists=True))
+@click.option(
+    "--dir",
+    "-d",
+    "directory",
+    is_flag=True,
+    default=False,
+    help="Sync all .kor files in directory",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    default=False,
+    help="Show detailed output",
+)
+def sync(path: str, directory: bool, verbose: bool) -> None:
+    """Sync .kor files to database.
+
+    Synchronizes existing .kor sidecar files to the SQLite database
+    without regenerating or re-labeling them.
+
+    Args:
+        path: Path to a .kor file or directory containing .kor files.
+        directory: Sync all .kor files in the directory.
+        verbose: Show detailed output.
+
+    Examples:
+        filekor sync document.kor
+        filekor sync ./docs/ --dir
+    """
+    from filekor.db import sync_file
+
+    if directory or Path(path).is_dir():
+        dir_path = Path(path)
+        # Find all .kor files (excluding .filekor/ directories to avoid recursion)
+        kor_files = list(dir_path.glob("**/*.kor"))
+        kor_files = [f for f in kor_files if ".filekor" not in f.parts]
+
+        if not kor_files:
+            console.print(f"[yellow]No .kor files found in {path}[/yellow]")
+            sys.exit(0)
+
+        console.print(f"[blue]Found {len(kor_files)} .kor files to sync[/blue]")
+
+        successful = 0
+        failed = 0
+
+        for kor_file in kor_files:
+            try:
+                sync_file(str(kor_file))
+                successful += 1
+                if verbose:
+                    console.print(f"[green]Synced:[/green] {kor_file.name}")
+            except Exception as e:
+                failed += 1
+                console.print(f"[red]Failed:[/red] {kor_file.name} - {e}")
+
+        console.print(
+            f"\n[bold]Completed:[/bold] {successful}/{len(kor_files)} synced, {failed} failed"
+        )
+        sys.exit(0 if failed == 0 else 1)
+    else:
+        # Single file
+        kor_path = Path(path)
+        if not kor_path.suffix == ".kor":
+            console.print("[red]Error: File must have .kor extension[/red]")
+            sys.exit(1)
+
+        try:
+            sync_file(str(kor_path))
+            console.print(f"[bold green]Synced:[/bold green] {kor_path}")
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

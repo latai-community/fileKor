@@ -296,9 +296,10 @@ class TestSidecarCommand:
             result = runner.invoke(sidecar, [str(test_file), "--no-cache"])
 
             assert result.exit_code == 0
-            # Check .kor file was created
-            kor_file = test_file.with_suffix(".kor")
-            assert kor_file.exists()
+            # Check .kor file was created in .filekor/ subdirectory
+            filekor_dir = test_file.parent / ".filekor"
+            kor_file = filekor_dir / f"{test_file.stem}.txt.kor"
+            assert kor_file.exists(), f"Expected {kor_file} to exist"
 
             # Verify YAML format
             data = yaml.safe_load(kor_file.read_text())
