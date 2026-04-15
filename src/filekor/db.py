@@ -63,6 +63,35 @@ CREATE TABLE IF NOT EXISTS labels (
 CREATE INDEX IF NOT EXISTS idx_labels_label ON labels(label);
 CREATE INDEX IF NOT EXISTS idx_labels_file_id ON labels(file_id);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(file_path);
+
+-- FTS5 Virtual Table for full-text search (filename + metadata)
+CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
+    name,
+    metadata_json,
+    content='files',
+    content_rowid='id',
+    tokenize='porter unicode61'
+);
+
+-- Trigger: Insert into FTS5 when file is inserted
+CREATE TRIGGER IF NOT EXISTS files_ai AFTER INSERT ON files BEGIN
+    INSERT INTO files_fts(rowid, name, metadata_json)
+    VALUES (new.id, new.name, new.metadata_json);
+END;
+
+-- Trigger: Delete from FTS5 when file is deleted
+CREATE TRIGGER IF NOT EXISTS files_ad AFTER DELETE ON files BEGIN
+    INSERT INTO files_fts(files_fts, rowid, name, metadata_json)
+    VALUES ('delete', old.id, old.name, old.metadata_json);
+END;
+
+-- Trigger: Update FTS5 when file is updated
+CREATE TRIGGER IF NOT EXISTS files_au AFTER UPDATE ON files BEGIN
+    INSERT INTO files_fts(files_fts, rowid, name, metadata_json)
+    VALUES ('delete', old.id, old.name, old.metadata_json);
+    INSERT INTO files_fts(rowid, name, metadata_json)
+    VALUES (new.id, new.name, new.metadata_json);
+END;
 """
 
 
@@ -398,6 +427,224 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+    def query_by_labels(self, labels: List[str]) -> List[Dict[str, Any]]:
+        """Query files that have ANY of the specified labels (OR logic).
+
+        Args:
+            labels: List of labels to search for.
+
+        Returns:
+            List of dictionaries containing file info and labels.
+        """
+        if not labels:
+            return self.query_all()
+
+        with self._get_connection() as conn:
+            # Build placeholder for IN clause
+            placeholders = ",".join("?" * len(labels))
+            cursor = conn.execute(
+                f"""
+                SELECT f.*, GROUP_CONCAT(DISTINCT l.label, ',') as labels
+                FROM files f
+                JOIN labels l ON f.id = l.file_id
+                WHERE l.label IN ({placeholders})
+                GROUP BY f.id
+                ORDER BY f.file_path
+                """,
+                tuple(labels),
+            )
+
+            results = []
+            for row in cursor.fetchall():
+                row_dict = dict(row)
+                labels_str = row_dict.pop("labels", None)
+                row_dict["labels"] = labels_str.split(",") if labels_str else []
+                results.append(row_dict)
+
+            return results
+
+    def search_content(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Full-text search in filename and metadata.
+
+        Uses FTS5 for fast full-text search across filename and .kor content.
+
+        Args:
+            query: Search query text.
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of dictionaries with file info, labels, and relevance score.
+        """
+        with self._get_connection() as conn:
+            # First check if FTS5 table exists and has data
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='files_fts'"
+            )
+            if not cursor.fetchone():
+                # FTS5 not available, fall back to LIKE search
+                return self._search_content_fallback(query, limit)
+
+            # FTS5 search with ranking
+            cursor = conn.execute(
+                """
+                SELECT f.*, GROUP_CONCAT(DISTINCT l.label, ',') as labels,
+                       rank as fts_rank
+                FROM files_fts
+                JOIN files f ON files_fts.rowid = f.id
+                LEFT JOIN labels l ON f.id = l.file_id
+                WHERE files_fts MATCH ?
+                GROUP BY f.id
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (query, limit),
+            )
+
+            results = []
+            for row in cursor.fetchall():
+                row_dict = dict(row)
+                labels_str = row_dict.pop("labels", None)
+                row_dict["labels"] = labels_str.split(",") if labels_str else []
+                row_dict["fts_rank"] = row_dict.pop("fts_rank", 0.0)
+                results.append(row_dict)
+
+            return results
+
+    def _search_content_fallback(
+        self, query: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Fallback search using LIKE when FTS5 is not available.
+
+        Args:
+            query: Search query text.
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of dictionaries with file info and labels.
+        """
+        search_pattern = f"%{query}%"
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT f.*, GROUP_CONCAT(DISTINCT l.label, ',') as labels
+                FROM files f
+                LEFT JOIN labels l ON f.id = l.file_id
+                WHERE f.name LIKE ? OR f.metadata_json LIKE ?
+                GROUP BY f.id
+                ORDER BY f.file_path
+                LIMIT ?
+                """,
+                (search_pattern, search_pattern, limit),
+            )
+
+            results = []
+            for row in cursor.fetchall():
+                row_dict = dict(row)
+                labels_str = row_dict.pop("labels", None)
+                row_dict["labels"] = labels_str.split(",") if labels_str else []
+                row_dict["fts_rank"] = 0.0  # No ranking available
+                results.append(row_dict)
+
+            return results
+
+    def search_files(
+        self,
+        labels: Optional[List[str]] = None,
+        query: Optional[str] = None,
+        limit: int = 50,
+        weights: Optional[Dict[str, float]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Combined search by labels and/or content.
+
+        Args:
+            labels: Labels to filter by (OR logic).
+            query: Search query text.
+            limit: Maximum number of results to return.
+            weights: Scoring weights for different match types.
+                Defaults: {"label_match": 0.50, "filename_match": 0.30,
+                          "kor_content_match": 0.20}
+
+        Returns:
+            List of dictionaries with file info, labels, and calculated score.
+        """
+        # Default weights
+        default_weights = {
+            "label_match": 0.50,
+            "filename_match": 0.30,
+            "kor_content_match": 0.20,
+        }
+        weights = weights or default_weights
+
+        # Get candidates based on labels
+        if labels:
+            label_results = self.query_by_labels(labels)
+            label_files = {r["id"]: r for r in label_results}
+        else:
+            label_files = {}
+
+        # Get candidates based on content search
+        if query:
+            content_results = self.search_content(query, limit=limit * 2)
+            content_files = {r["id"]: r for r in content_results}
+        else:
+            content_files = {}
+
+        # Combine results
+        all_ids = set(label_files.keys()) | set(content_files.keys())
+
+        if not all_ids:
+            return []
+
+        # Calculate scores for each file
+        results = []
+        query_lower = query.lower() if query else ""
+
+        for file_id in all_ids:
+            file_data = content_files.get(file_id, label_files.get(file_id, {}))
+            if not file_data:
+                continue
+
+            score = 0.0
+            score_breakdown = {}
+
+            # Label match score
+            if labels and file_id in label_files:
+                file_labels = set(file_data.get("labels", []))
+                matched_labels = file_labels & set(labels)
+                label_score = len(matched_labels) / max(len(labels), 1)
+                score += label_score * weights.get("label_match", 0.50)
+                score_breakdown["label_match"] = label_score
+
+            # Filename match score
+            if query:
+                filename = file_data.get("name", "").lower()
+                if query_lower in filename:
+                    filename_score = 1.0
+                else:
+                    # Check individual words
+                    query_words = query_lower.split()
+                    matches = sum(1 for word in query_words if word in filename)
+                    filename_score = matches / max(len(query_words), 1)
+                score += filename_score * weights.get("filename_match", 0.30)
+                score_breakdown["filename_match"] = filename_score
+
+            # Content match score (from FTS rank or fallback)
+            if query and file_id in content_files:
+                content_score = 1.0 - min(
+                    abs(content_files[file_id].get("fts_rank", 0)), 1.0
+                )
+                score += content_score * weights.get("kor_content_match", 0.20)
+                score_breakdown["kor_content_match"] = content_score
+
+            file_data["score"] = round(score, 4)
+            file_data["score_breakdown"] = score_breakdown
+            results.append(file_data)
+
+        # Sort by score descending
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        return results[:limit]
+
 
 # Module-level singleton accessor
 _db_instance: Optional[Database] = None
@@ -483,6 +730,86 @@ def query_all(db: Optional[Database] = None) -> List[Dict[str, Any]]:
     if db is None:
         db = get_db()
     return db.query_all()
+
+
+def query_by_labels(
+    labels: List[str], db: Optional[Database] = None
+) -> List[Dict[str, Any]]:
+    """Convenience function to query files by multiple labels (OR logic).
+
+    Args:
+        labels: List of labels to search for.
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        List of dictionaries containing file info and labels.
+
+    Example:
+        >>> from filekor.db import query_by_labels
+        >>> files = query_by_labels(["finance", "2026"])
+        >>> print(files[0]["file_path"])
+        '/path/to/report.pdf'
+    """
+    if db is None:
+        db = get_db()
+    return db.query_by_labels(labels)
+
+
+def search_content(
+    query: str, limit: int = 50, db: Optional[Database] = None
+) -> List[Dict[str, Any]]:
+    """Convenience function for full-text search.
+
+    Args:
+        query: Search query text.
+        limit: Maximum number of results to return.
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        List of dictionaries with file info, labels, and relevance rank.
+
+    Example:
+        >>> from filekor.db import search_content
+        >>> results = search_content("budget report")
+        >>> print(results[0]["name"])
+        'budget-report.pdf'
+    """
+    if db is None:
+        db = get_db()
+    return db.search_content(query, limit)
+
+
+def search_files(
+    labels: Optional[List[str]] = None,
+    query: Optional[str] = None,
+    limit: int = 50,
+    weights: Optional[Dict[str, float]] = None,
+    db: Optional[Database] = None,
+) -> List[Dict[str, Any]]:
+    """Convenience function for combined search by labels and/or content.
+
+    Args:
+        labels: Labels to filter by (OR logic).
+        query: Search query text.
+        limit: Maximum number of results to return.
+        weights: Scoring weights for different match types.
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        List of dictionaries with file info, labels, and calculated score.
+
+    Example:
+        >>> from filekor.db import search_files
+        >>> results = search_files(
+        ...     labels=["finance", "2026"],
+        ...     query="provider costs"
+        ... )
+        >>> print(f"{results[0]['name']}: {results[0]['score']}")
+        'report.pdf: 0.85'
+    """
+    if db is None:
+        db = get_db()
+    return db.search_files(labels, query, limit, weights)
 
 
 def close_db(db: Optional[Database] = None) -> None:
