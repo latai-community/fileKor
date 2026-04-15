@@ -22,10 +22,10 @@ filekor sync documento.kor          # Sync existing .kor to database
 
 ## Library Usage
 
-filekor can also be used as a Python library for database-backed queries:
+filekor can be used as a Python library for database-backed queries and search:
 
 ```python
-from filekor.db import get_db, sync_file, query_by_label
+from filekor.db import get_db, sync_file, search_files
 
 # Get database instance (lazy singleton)
 db = get_db()
@@ -33,33 +33,52 @@ db = get_db()
 # Sync a .kor file to the database
 sync_file("./documento.kor")
 
-# Query files by label
-files = query_by_label("finance")
-# ['/docs/report.pdf', '/docs/invoice.pdf']
+# Search files by labels and content with scoring
+results = search_files(
+    labels=["finance", "2026"],
+    query="budget report"
+)
+# Returns ranked results with relevance scores
 ```
 
 Enable auto-sync in `config.yaml` to automatically update the database when using CLI commands.
 
 ## Features
 
+### Core Features
 - **Metadata Extraction** - Extract metadata from PDF, TXT, MD files using PyExifTool
 - **Text Extraction** - Extract and summarize text content from supported files
-- **LLM-based Labeling** - Classify files using LLM (Gemini, OpenAI, Groq, OpenRouter)
 - **Sidecar Generation** - Generate YAML sidecar files (.kor) with full metadata
-- **Database Sync** - Sync .kor files to SQLite database
-- **Database Indexing** - SQLite backend for querying files by labels
-- **Library API** - Use filekor as a Python library
-- **CLI Interface** - Simple command-line interface with multiple commands
+- **Taxonomy Labels** - LLM-based classification with custom taxonomy support
+
+### LLM Providers
+- **Google Gemini** - Native Gemini API support
+- **OpenAI** - GPT-4o, GPT-4o-mini support
+- **Groq** - Fast inference with Llama models
+- **OpenRouter** - Access to 200+ free models
+- **Mock Provider** - Testing without API calls
+
+### Database & Search
+- **SQLite Database** - Index all .kor metadata
+- **Full-Text Search** - FTS5 for fast filename/metadata search
+- **Multi-Label Search** - OR logic for filtering by multiple labels
+- **Relevance Scoring** - Configurable weights for search ranking
+- **Auto-Sync** - Automatic database updates from CLI
+
+### Interfaces
+- **CLI** - Complete command-line interface
+- **Library API** - Python API for integration
+- **100 Tests** - Comprehensive test coverage
 
 ## Documentation
 
 | Guide | Description |
 |-------|-------------|
 | [Installation](docs/installation.md) | Setup and installation |
-| [Usage](docs/usage.md) | CLI commands reference (extract, sidecar, labels, sync, status) |
-| [Taxonomy](docs/taxonomy.md) | Labels configuration |
-| [LLM](docs/llm.md) | LLM setup |
-| [Development](docs/development.md) | Developer guide |
+| [Usage](docs/usage.md) | CLI commands and Library API reference |
+| [Taxonomy](docs/taxonomy.md) | Labels and taxonomy configuration |
+| [LLM](docs/llm.md) | LLM provider setup (Gemini, OpenAI, Groq, OpenRouter) |
+| [Development](docs/development.md) | Development and testing guide |
 
 ## Project Structure
 

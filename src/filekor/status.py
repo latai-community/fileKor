@@ -39,7 +39,11 @@ def get_file_status(file_path: str) -> FileStatus:
         FileStatus instance.
     """
     path = Path(file_path)
-    kor_path = path.with_suffix(".kor")
+
+    # Check new location: .filekor/{filename}.{ext}.kor
+    ext = path.suffix.lstrip(".").lower()
+    filekor_dir = path.parent / ".filekor"
+    kor_path = filekor_dir / f"{path.stem}.{ext}.kor"
 
     if not path.exists():
         return FileStatus(
@@ -95,15 +99,19 @@ def get_directory_status(directory: str, recursive: bool = True) -> DirectorySta
     for ext in SUPPORTED_EXTENSIONS:
         supported_files.extend(dir_path.glob(f"{pattern}.{ext}"))
 
-    # Find all .kor files
-    kor_files = list(dir_path.glob("*.kor"))
+    # Find all .kor files (in .filekor/ subdirectory)
+    kor_files = []
+    filekor_dirs = [dir_path / ".filekor"]
     if recursive:
-        kor_files.extend(dir_path.glob("**/*.kor"))
+        filekor_dirs.extend(dir_path.glob("**/.filekor"))
 
-    # Get status for each file
+    for fk_dir in filekor_dirs:
+        if fk_dir.exists() and fk_dir.is_dir():
+            kor_files.extend(fk_dir.glob("*.kor"))
+
+    # Get status for each file (checks .filekor/ automatically)
     file_statuses = []
     for file_path in supported_files:
-        kor_path = file_path.with_suffix(".kor")
         status = get_file_status(str(file_path))
         file_statuses.append(status)
 

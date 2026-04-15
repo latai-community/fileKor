@@ -355,95 +355,6 @@ def sidecar(
     else:
         _sidecar_file(path, output, no_cache, config, verbose)
         return
-    # Load LLM config (if available)
-    llm_config = LLMConfig.load(config) if config else LLMConfig.load()
-
-    # Show config status (verbose only)
-    if verbose:
-        if config:
-            console.print(f"[blue]Config:[/blue] {config}")
-        else:
-            console.print("[blue]Config:[/blue] auto-search")
-
-        if llm_config.enabled and llm_config.api_key:
-            console.print(
-                f"[green]LLM:[/green] enabled ({llm_config.provider}, {llm_config.model})"
-            )
-        else:
-            console.print(
-                "[yellow]LLM:[/yellow] not configured (sidecar will be generated without labels)"
-            )
-
-    file_path = Path(path)
-
-    if not file_path.exists():
-        click.echo(f"Error: File not found: {path}", err=True)
-        sys.exit(2)
-
-    supported_extensions = {"pdf", "txt", "md"}
-    file_ext = file_path.suffix.lstrip(".").lower()
-    if file_ext not in supported_extensions:
-        click.echo(f"Error: Unsupported file type: .{file_ext}", err=True)
-        sys.exit(1)
-
-    # Output path: .kor extension
-    if output:
-        sidecar_path = Path(output)
-    else:
-        sidecar_path = file_path.with_suffix(".kor")
-
-    if sidecar_path.exists() and not no_cache:
-        click.echo(f"Info: Sidecar already exists: {sidecar_path}", err=True)
-        sys.exit(0)
-
-    # Extract metadata (exiftool)
-    adapter = PyExifToolAdapter()
-    exif_available = adapter.is_available()
-
-    metadata = None
-    if exif_available:
-        try:
-            metadata = adapter.extract_metadata(path)
-            if verbose:
-                console.print("[green]Metadata:[/green] extracted")
-        except (FileNotFoundError, PermissionError, Exception):
-            pass  # Continue without metadata
-
-    # Extract text content
-    content_obj = None
-    text_content = None
-    try:
-        text, word_count, page_count = extract_text(path)
-        text_content = text  # Save for LLM
-        content_obj = Content(
-            language="en",  # Could detect language, default to "en"
-            word_count=word_count,
-            page_count=page_count,
-        )
-        if verbose:
-            console.print(
-                f"[green]Text:[/green] {word_count} words, {page_count} pages"
-            )
-    except Exception as e:
-        if verbose:
-            console.print(f"[red]Text extraction failed:[/red] {e}")
-        pass  # Continue without content
-
-    # Create sidecar with YAML output
-    sidecar = Sidecar.create(
-        path,
-        metadata=metadata,
-        content=content_obj,
-        labels_config=LabelsConfig.load(),
-        text_content=text_content,
-        verbose=verbose,
-    )
-
-    # Write YAML
-    sidecar_path.write_text(sidecar.to_yaml())
-
-    console.print(f"[bold green]Created:[/bold green] {sidecar_path}")
-    sys.exit(0)
 
 
 def _auto_sync_hook(sidecar_path: Path, llm_config: LLMConfig, verbose: bool) -> None:
@@ -746,7 +657,10 @@ def _labels_file(
         console.print(f"[red]Error: File not found: {path}[/red]")
         sys.exit(2)
 
-    kor_path = file_path.with_suffix(".kor")
+    # Get kor path in .filekor/ subdirectory
+    file_ext = file_path.suffix.lstrip(".").lower()
+    filekor_dir = file_path.parent / ".filekor"
+    kor_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
     sidecar_file = None
     existing_kor = kor_path.exists()
 
@@ -801,6 +715,8 @@ def _labels_file(
         sidecar_file = Sidecar.load(str(kor_path))
     else:
         console.print(f"[blue]Creating new: {kor_path}[/blue]")
+        # Ensure .filekor directory exists
+        filekor_dir.mkdir(parents=True, exist_ok=True)
         # Create new sidecar with file info only (no metadata/content extraction here)
         sidecar_file = Sidecar.create(
             path,
@@ -978,27 +894,36 @@ def status(path: str, directory: bool, watch: bool) -> None:
 
 
 def _status_file(file_path: str) -> None:
-    """Show status for a single file."""
-    path = Path(file_path)
-    kor_path = path.with_suffix(".kor")
+    """Show status for a single file using status module."""
+    from filekor.status import get_file_status, summarize
 
-    if not path.exists():
+    status = get_file_status(file_path)
+
+    if not status.file_path.exists():
         console.print(f"[red]Error: File not found: {file_path}[/red]")
         sys.exit(2)
 
-    if not kor_path.exists():
-        console.print(f"[yellow]No .kor file found for {path.name}[/yellow]")
+    if not status.exists:
+        console.print(
+            f"[yellow]No .kor file found for {status.file_path.name}[/yellow]"
+        )
+        console.print(f"Expected at: {status.kor_path}")
         console.print("Run 'filekor sidecar' to generate one.")
         sys.exit(1)
 
-    # Load and display sidecar info
-    sidecar = Sidecar.load(str(kor_path))
+    if status.error:
+        console.print(f"[red]Error loading .kor: {status.error}[/red]")
+        sys.exit(1)
 
-    table = Table(title=f"Status: {path.name}")
+    # Load and display sidecar info
+    sidecar = status.sidecar
+
+    table = Table(title=f"Status: {status.file_path.name}")
     table.add_column("Field", style="cyan")
     table.add_column("Value", style="white")
 
-    table.add_row("Path", str(path))
+    table.add_row("Path", str(status.file_path))
+    table.add_row("Kor Path", str(status.kor_path))
     table.add_row("Name", sidecar.file.name)
     table.add_row("Extension", sidecar.file.extension)
     table.add_row("Size", f"{sidecar.file.size_bytes} bytes")
@@ -1025,64 +950,63 @@ def _status_file(file_path: str) -> None:
 
 
 def _status_directory(directory: str, watch: bool) -> None:
-    """Show status for all .kor files in a directory."""
-    from filekor.processor import SUPPORTED_EXTENSIONS
+    """Show status for all .kor files in a directory using status module."""
+    from filekor.status import get_directory_status
 
     dir_path = Path(directory)
     if not dir_path.is_dir():
         console.print(f"[red]Error: Not a directory: {directory}[/red]")
         sys.exit(1)
 
-    # Find all supported files and .kor files
-    supported_files = []
-    kor_files = []
-
-    for ext in SUPPORTED_EXTENSIONS:
-        for f in dir_path.glob(f"*.{ext}"):
-            if f not in supported_files:
-                supported_files.append(f)
-        for f in dir_path.glob(f"**/*.{ext}"):
-            if f not in supported_files:
-                supported_files.append(f)
-
-    for f in dir_path.glob("*.kor"):
-        if f not in kor_files:
-            kor_files.append(f)
-    for f in dir_path.glob("**/*.kor"):
-        if f not in kor_files:
-            kor_files.append(f)
+    # Get directory status from status module
+    status = get_directory_status(directory, recursive=True)
 
     # Create emitter
     emitter = create_emitter(watch=watch)
     emitter.status(
-        directory, [str(f) for f in supported_files], [str(k) for k in kor_files]
+        directory,
+        [str(s.file_path) for s in status.file_statuses],
+        [str(s.kor_path) for s in status.file_statuses if s.exists],
     )
 
     # Display summary
     console.print(f"\n[bold]Directory:[/bold] {directory}")
-    console.print(f"[blue]Supported files:[/blue] {len(supported_files)}")
-    console.print(f"[green].kor files:[/green] {len(kor_files)}")
+    console.print(f"[blue]Supported files:[/blue] {status.total_files}")
+    console.print(f"[green].kor files:[/green] {status.kor_files}")
 
-    if kor_files:
-        console.print("\n[bold].kor Files:[/bold]")
-        for kor_file in kor_files:
-            try:
-                sidecar = Sidecar.load(str(kor_file))
-                labels_str = ""
-                if sidecar.labels and sidecar.labels.suggested:
-                    labels_str = f" [{', '.join(sidecar.labels.suggested)}]"
-                console.print(f"  [green]OK[/green] {kor_file.name}{labels_str}")
-            except Exception:
-                console.print(f"  [red]FAIL[/red] {kor_file.name} (corrupted)")
+    if status.file_statuses:
+        # Show .kor files with status
+        kor_statuses = [s for s in status.file_statuses if s.exists]
+        if kor_statuses:
+            console.print("\n[bold].kor Files:[/bold]")
+            for file_status in kor_statuses:
+                try:
+                    if file_status.sidecar:
+                        labels_str = ""
+                        if (
+                            file_status.sidecar.labels
+                            and file_status.sidecar.labels.suggested
+                        ):
+                            labels_str = (
+                                f" [{', '.join(file_status.sidecar.labels.suggested)}]"
+                            )
+                        console.print(
+                            f"  [green]OK[/green] {file_status.kor_path.name}{labels_str}"
+                        )
+                    else:
+                        console.print(
+                            f"  [yellow]LOAD[/yellow] {file_status.kor_path.name}"
+                        )
+                except Exception:
+                    console.print(
+                        f"  [red]FAIL[/red] {file_status.kor_path.name} (corrupted)"
+                    )
 
-    # Show files without .kor
-    files_without_kor = [
-        f for f in supported_files if not f.with_suffix(".kor").exists()
-    ]
-    if files_without_kor:
-        console.print("\n[yellow]Files without .kor:[/yellow]")
-        for f in files_without_kor:
-            console.print(f"  - {f.name}")
+        # Show files without .kor
+        if status.files_without_kor:
+            console.print("\n[yellow]Files without .kor:[/yellow]")
+            for f in status.files_without_kor:
+                console.print(f"  - {f.name}")
 
     sys.exit(0)
 

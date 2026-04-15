@@ -310,4 +310,93 @@ The SQLite database includes:
 
 - **files** - File metadata (path, hash, timestamps)
 - **labels** - Associated labels with confidence scores
+- **files_fts** - Full-text search index (FTS5)
 - **schema_version** - Migration tracking
+
+---
+
+## Library API
+
+filekor can be used as a Python library for programmatic access to the database.
+
+### Quick Start
+
+```python
+from filekor.db import get_db, sync_file, search_files
+
+# Get database instance
+db = get_db()
+
+# Sync a .kor file to the database
+sync_file("./document.kor")
+
+# Search files by labels and content
+results = search_files(
+    labels=["finance", "2026"],
+    query="budget report"
+)
+```
+
+### Available Functions
+
+| Function | Description |
+|----------|-------------|
+| `get_db()` | Get singleton database instance |
+| `sync_file(kor_path)` | Sync .kor file to database |
+| `query_by_label(label)` | Query files by single label |
+| `query_by_labels(labels)` | Query files by multiple labels (OR) |
+| `query_all()` | Get all files with labels |
+| `search_content(query)` | Full-text search in filename + metadata |
+| `search_files(labels, query)` | Combined search with scoring |
+
+### Search API
+
+The search API supports filtering by labels and full-text search:
+
+```python
+from filekor.db import search_files, query_by_labels, search_content
+
+# 1. Query by multiple labels (OR logic)
+results = query_by_labels(["finance", "2026"])
+# Returns files with label "finance" OR "2026"
+
+# 2. Full-text search (FTS5)
+results = search_content("provider costs", limit=10)
+# Searches in filename and .kor metadata
+
+# 3. Combined search with scoring
+results = search_files(
+    labels=["finance", "2026"],
+    query="provider costs",
+    weights={
+        "label_match": 0.50,
+        "filename_match": 0.30,
+        "kor_content_match": 0.20
+    }
+)
+
+# Result format:
+# {
+#     "file_path": "./docs/report.pdf",
+#     "name": "report.pdf",
+#     "labels": ["finance", "2026", "budget"],
+#     "score": 0.85,
+#     "score_breakdown": {
+#         "label_match": 1.0,
+#         "filename_match": 0.5,
+#         "kor_content_match": 0.8
+#     }
+# }
+```
+
+### Scoring System
+
+The `search_files()` function calculates relevance scores:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| label_match | 0.50 | Files matching requested labels |
+| filename_match | 0.30 | Query matches filename |
+| kor_content_match | 0.20 | Query matches .kor metadata |
+
+Weights are configurable via the `weights` parameter.
