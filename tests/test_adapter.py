@@ -273,43 +273,77 @@ class TestSidecarCommand:
         """Verify sidecar command generates .kor JSON file."""
         from click.testing import CliRunner
         from filekor.cli import sidecar
+        import os
 
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("Test content for sidecar")
+        # Create mock config.yaml with LLM enabled
+        config_content = """filekor:
+  llm:
+    enabled: true
+    provider: mock
+    api_key: test-key
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
 
-        runner = CliRunner()
-        result = runner.invoke(sidecar, [str(test_file), "--no-cache"])
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
 
-        assert result.exit_code == 0
-        # Check .kor file was created
-        kor_file = test_file.with_suffix(".kor")
-        assert kor_file.exists()
+            test_file = tmp_path / "test.txt"
+            test_file.write_text("Test content for sidecar")
 
-        # Verify YAML format
-        data = yaml.safe_load(kor_file.read_text())
-        assert "version" in data
-        assert "file" in data
-        assert "content" in data
+            runner = CliRunner()
+            result = runner.invoke(sidecar, [str(test_file), "--no-cache"])
+
+            assert result.exit_code == 0
+            # Check .kor file was created
+            kor_file = test_file.with_suffix(".kor")
+            assert kor_file.exists()
+
+            # Verify YAML format
+            data = yaml.safe_load(kor_file.read_text())
+            assert "version" in data
+            assert "file" in data
+            assert "content" in data
+        finally:
+            os.chdir(old_cwd)
 
     @patch("filekor.cli.HAS_PYPDF", False)
     def test_sidecar_custom_output(self, tmp_path):
         """Verify sidecar command with custom output path."""
         from click.testing import CliRunner
         from filekor.cli import sidecar
+        import os
 
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("Test")
+        # Create mock config.yaml with LLM enabled
+        config_content = """filekor:
+  llm:
+    enabled: true
+    provider: mock
+    api_key: test-key
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
 
-        output_file = tmp_path / "custom.kor"
-        runner = CliRunner()
-        result = runner.invoke(
-            sidecar, [str(test_file), "-o", str(output_file), "--no-cache"]
-        )
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
 
-        assert result.exit_code == 0
-        assert output_file.exists()
-        data = yaml.safe_load(output_file.read_text())
-        assert "version" in data
+            test_file = tmp_path / "test.txt"
+            test_file.write_text("Test")
+
+            output_file = tmp_path / "custom.kor"
+            runner = CliRunner()
+            result = runner.invoke(
+                sidecar, [str(test_file), "-o", str(output_file), "--no-cache"]
+            )
+
+            assert result.exit_code == 0
+            assert output_file.exists()
+            data = yaml.safe_load(output_file.read_text())
+            assert "version" in data
+        finally:
+            os.chdir(old_cwd)
 
 
 class TestProcessCommand:

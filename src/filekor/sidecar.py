@@ -4,11 +4,11 @@ import hashlib
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
-from filekor.labels import suggest_from_path, suggest_hybrid, LabelsConfig, LLMConfig
+from filekor.labels import suggest_labels, LabelsConfig, LLMConfig
 
 
 class FileInfo(BaseModel):
@@ -53,17 +53,15 @@ class FileSummary(BaseModel):
 
 
 class FileLabels(BaseModel):
-    """Optional labels with confidence scores.
+    """Optional labels with source information.
 
     Attributes:
         suggested: List of suggested label names.
-        confidence: Dictionary mapping labels to confidence scores (path-based only).
-        source: Source of labels - "llm" or "path".
+        source: Source of labels (always "llm").
     """
 
     suggested: List[str] = []
-    confidence: Dict[str, float] = {}
-    source: Optional[str] = None
+    source: Literal["llm"] = "llm"
 
 
 class Sidecar(BaseModel):
@@ -75,7 +73,7 @@ class Sidecar(BaseModel):
         metadata: Optional extracted metadata (author, created, pages).
         content: Optional content info (language, word_count).
         summary: Optional summary (short, long).
-        labels: Optional labels (suggested, confidence).
+        labels: Optional labels (suggested, source).
         parser_status: Parser status (OK, DEGRADED, BROKEN).
         generated_at: ISO timestamp when metadata was generated.
     """
@@ -161,7 +159,6 @@ class Sidecar(BaseModel):
         content: Optional[Content] = None,
         labels_config: Optional[LabelsConfig] = None,
         text_content: Optional[str] = None,
-        use_llm: Optional[bool] = None,
     ) -> "Sidecar":
         """Create a new Sidecar instance.
 
@@ -171,10 +168,12 @@ class Sidecar(BaseModel):
             content: Optional Content object with text extraction info.
             labels_config: Optional LabelsConfig for auto-labeling.
             text_content: Optional extracted text content for LLM-based labeling.
-            use_llm: Force LLM usage (True=LLM, False=path only, None=auto from config).
 
         Returns:
             A new Sidecar instance with computed file info and current timestamp.
+
+        Raises:
+            RuntimeError: If LLM is not configured and labels_config is provided.
         """
         path = Path(file_path)
 
@@ -202,25 +201,16 @@ class Sidecar(BaseModel):
 
         # Auto-populate labels if config is provided
         labels = None
-        if labels_config:
-            # Use hybrid approach with optional LLM
-            suggested_labels, source = suggest_hybrid(
-                str(path),
+        if labels_config and text_content:
+            # Use LLM only for label extraction
+            suggested_labels = suggest_labels(
                 content=text_content,
-                use_llm=use_llm,
                 config=labels_config,
-                llm_config=LLMConfig.load() if use_llm else None,
             )
             if suggested_labels:
-                confidence = {}
-                if source == "path":
-                    # Get confidence from path-based if available
-                    path_suggestions = suggest_from_path(str(path), labels_config)
-                    confidence = {label: conf for label, conf in path_suggestions}
                 labels = FileLabels(
                     suggested=suggested_labels,
-                    confidence=confidence,
-                    source=source,
+                    source="llm",
                 )
 
         return cls(

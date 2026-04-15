@@ -7,7 +7,7 @@ from typing import Optional
 import click
 
 from filekor.adapters.exiftool import PyExifToolAdapter
-from filekor.labels import LabelsConfig, suggest_from_path, suggest_hybrid, LLMConfig
+from filekor.labels import LabelsConfig, suggest_labels, LLMConfig
 from filekor.sidecar import Content, Sidecar
 
 # Text extraction try-imports (optional dependencies)
@@ -197,25 +197,16 @@ def process(path: str, output: Optional[str], format: str) -> None:
     help="Force regeneration, ignore existing sidecar file",
 )
 @click.option(
-    "--llm",
-    "use_llm",
-    is_flag=True,
-    default=None,
-    help="Use LLM for label extraction",
-)
-@click.option(
-    "--no-llm",
-    "no_llm",
+    "--no-cache",
+    "no_cache",
     is_flag=True,
     default=False,
-    help="Use path-based label extraction only",
+    help="Force regeneration, ignore existing sidecar file",
 )
 def sidecar(
     path: str,
     output: Optional[str],
     no_cache: bool,
-    use_llm: Optional[bool],
-    no_llm: bool,
 ) -> None:
     """Generate a .kor sidecar file with full metadata for a supported file.
 
@@ -223,20 +214,19 @@ def sidecar(
         path: Path to the file.
         output: Optional output file path for sidecar.
         no_cache: Force regeneration, ignore existing sidecar file.
-        use_llm: Use LLM for label extraction.
-        no_llm: Use path-based label extraction only.
-    """
-    # Validate LLM flags
-    if use_llm and no_llm:
-        click.echo("Error: Cannot use both --llm and --no-llm flags.", err=True)
-        sys.exit(1)
 
-    # Determine use_llm value
-    llm_enabled = None
-    if use_llm:
-        llm_enabled = True
-    elif no_llm:
-        llm_enabled = False
+    Raises:
+        RuntimeError: If LLM is not configured in config.yaml.
+    """
+    # Check if LLM is configured
+    llm_config = LLMConfig.load()
+    if not llm_config.enabled or not llm_config.api_key:
+        click.echo(
+            "Error: LLM is not configured. Please enable LLM in config.yaml "
+            "with a valid API key.",
+            err=True,
+        )
+        sys.exit(1)
 
     file_path = Path(path)
 
@@ -292,7 +282,6 @@ def sidecar(
         content=content_obj,
         labels_config=LabelsConfig.load(),
         text_content=text_content,
-        use_llm=llm_enabled,
     )
 
     # Write YAML
@@ -305,63 +294,37 @@ def sidecar(
 @cli.command()
 @click.argument("path")
 @click.option(
-    "--show-confidence",
-    is_flag=True,
-    default=False,
-    help="Show confidence scores for each label",
-)
-@click.option(
     "--config",
     "-c",
     type=click.Path(exists=True),
     default=None,
     help="Custom labels.properties file",
 )
-@click.option(
-    "--llm",
-    "use_llm",
-    is_flag=True,
-    default=None,
-    help="Use LLM for label extraction",
-)
-@click.option(
-    "--no-llm",
-    "no_llm",
-    is_flag=True,
-    default=False,
-    help="Use path-based label extraction only",
-)
 def labels(
     path: str,
-    show_confidence: bool,
     config: Optional[str],
-    use_llm: Optional[bool],
-    no_llm: bool,
 ) -> None:
-    """Suggest labels based on file path.
+    """Suggest labels based on file content using LLM.
 
-    Analyzes the file path and suggests labels based on matching synonyms
-    from the labels configuration. Can optionally use LLM for content-based
-    label extraction.
+    Analyzes the file content and suggests labels using LLM-based
+    extraction from the labels configuration.
 
     Args:
         path: Path to the file to analyze.
-        show_confidence: Whether to show confidence scores.
         config: Optional custom labels.properties file path.
-        use_llm: Use LLM for label extraction.
-        no_llm: Use path-based label extraction only.
-    """
-    # Validate LLM flags
-    if use_llm and no_llm:
-        click.echo("Error: Cannot use both --llm and --no-llm flags.", err=True)
-        sys.exit(1)
 
-    # Determine use_llm value
-    llm_enabled = None
-    if use_llm:
-        llm_enabled = True
-    elif no_llm:
-        llm_enabled = False
+    Raises:
+        RuntimeError: If LLM is not configured in config.yaml.
+    """
+    # Check if LLM is configured
+    llm_config = LLMConfig.load()
+    if not llm_config.enabled or not llm_config.api_key:
+        click.echo(
+            "Error: LLM is not configured. Please enable LLM in config.yaml "
+            "with a valid API key.",
+            err=True,
+        )
+        sys.exit(1)
 
     # Load config (custom or default)
     labels_config = None
@@ -370,45 +333,31 @@ def labels(
     else:
         labels_config = LabelsConfig.load()
 
-    # Get text content for LLM if needed
+    # Get text content for LLM
     text_content = None
-    if llm_enabled:
-        try:
-            text_content, _, _ = extract_text(path)
-        except Exception:
-            pass  # Continue without content
+    try:
+        text_content, _, _ = extract_text(path)
+    except Exception:
+        click.echo("Error: Could not read file content.", err=True)
+        sys.exit(1)
 
-    # Get suggestions using hybrid approach
-    suggestions, source = suggest_hybrid(
-        path,
-        content=text_content,
-        use_llm=llm_enabled,
-        config=labels_config,
-        llm_config=LLMConfig.load() if llm_enabled else None,
-    )
+    # Get suggestions using LLM only
+    try:
+        suggestions = suggest_labels(
+            content=text_content,
+            config=labels_config,
+        )
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
     if not suggestions:
-        click.echo("No labels suggested for this path.")
+        click.echo("No labels suggested for this file.")
         sys.exit(0)
 
     # Output labels
-    if show_confidence and source == "path":
-        # Show confidence for path-based labels
-        for label in suggestions:
-            confidence = labels_config.synonyms.get(label, [])
-            # Calculate confidence based on matches
-            path_obj = Path(path)
-            words = set(
-                path_obj.stem.lower().replace("-", " ").replace("_", " ").split()
-            )
-            for part in path_obj.parts[:-1]:
-                words.update(part.lower().replace("-", " ").replace("_", " ").split())
-            matched = sum(1 for s in confidence if s in words)
-            conf = matched / len(confidence) if confidence else 0
-            click.echo(f"{label}: {conf:.2f}")
-    else:
-        for label in suggestions:
-            click.echo(label)
+    for label in suggestions:
+        click.echo(label)
 
     sys.exit(0)
 

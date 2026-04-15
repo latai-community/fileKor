@@ -3,7 +3,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 class LLMProvider(ABC):
@@ -13,13 +13,13 @@ class LLMProvider(ABC):
     def extract_labels(
         self,
         content: str,
-        available_labels: List[str],
+        taxonomy: Dict[str, List[str]],
     ) -> List[str]:
         """Extract labels from content using LLM.
 
         Args:
             content: Text content to analyze.
-            available_labels: List of available label names from taxonomy.
+            taxonomy: Dict mapping label names to synonym lists.
 
         Returns:
             List of suggested labels.
@@ -47,13 +47,13 @@ class GoogleProvider(LLMProvider):
     def extract_labels(
         self,
         content: str,
-        available_labels: List[str],
+        taxonomy: Dict[str, List[str]],
     ) -> List[str]:
         """Extract labels from content using Google Gemini.
 
         Args:
             content: Text content to analyze.
-            available_labels: List of available label names from taxonomy.
+            taxonomy: Dict mapping label names to synonym lists.
 
         Returns:
             List of suggested labels.
@@ -72,9 +72,16 @@ class GoogleProvider(LLMProvider):
 
         client = genai.Client(api_key=self.api_key)
 
-        labels_str = ", ".join(available_labels)
+        # Build taxonomy context with synonyms
+        taxonomy_lines = []
+        for label, synonyms in taxonomy.items():
+            synonyms_str = ", ".join(synonyms)
+            taxonomy_lines.append(f"- {label}: {synonyms_str}")
+        taxonomy_str = "\n".join(taxonomy_lines)
+
         prompt = f"""Based on the following file content, suggest 1-5 taxonomy labels from this list:
-{labels_str}
+
+{taxonomy_str}
 
 Content:
 {content}
@@ -94,7 +101,7 @@ Return ONLY the labels as comma-separated list, nothing else. If no labels apply
         # Parse comma-separated labels
         labels = [label.strip() for label in text.split(",")]
         # Filter to only valid labels from the taxonomy
-        valid_labels = [label for label in labels if label in available_labels]
+        valid_labels = [label for label in labels if label in taxonomy]
 
         return valid_labels
 
@@ -113,19 +120,19 @@ class MockProvider(LLMProvider):
     def extract_labels(
         self,
         content: str,
-        available_labels: List[str],
+        taxonomy: Dict[str, List[str]],
     ) -> List[str]:
         """Return mock labels.
 
         Args:
             content: Text content (ignored).
-            available_labels: List of available label names.
+            taxonomy: Dict mapping label names to synonym lists.
 
         Returns:
             Mock labels.
         """
         # Return first few valid labels for testing
-        return [label for label in self.labels if label in available_labels][:3]
+        return [label for label in self.labels if label in taxonomy][:3]
 
 
 def get_provider(

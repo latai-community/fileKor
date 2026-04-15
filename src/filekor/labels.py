@@ -3,7 +3,7 @@
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from filekor.llm import LLMProvider, get_provider
 
@@ -159,70 +159,6 @@ def get_config() -> LabelsConfig:
     return _config
 
 
-def suggest_from_path(
-    file_path: str,
-    config: Optional[LabelsConfig] = None,
-    threshold: Optional[float] = None,
-) -> List[Tuple[str, float]]:
-    """Suggest labels based on a file path.
-
-    Extracts words from the file path (filename and directory components),
-    converts them to lowercase, and matches them against synonyms to calculate
-    confidence scores.
-
-    Args:
-        file_path: Path to the file.
-        config: LabelsConfig instance (uses global config if None).
-        threshold: Minimum confidence threshold (uses config.confidence_threshold if None).
-
-    Returns:
-        List of (label, confidence) tuples sorted by confidence descending.
-    """
-    if config is None:
-        config = get_config()
-
-    # Use config threshold if not provided
-    if threshold is None:
-        threshold = config.confidence_threshold
-
-    # Extract words from path
-    path = Path(file_path)
-    words = set()
-
-    # Add filename parts
-    name_without_ext = path.stem.lower()
-    for word in (
-        name_without_ext.replace("-", " ").replace("_", " ").replace("/", " ").split()
-    ):
-        if word:
-            words.add(word)
-
-    # Add directory parts
-    for part in path.parts[:-1]:
-        for word in part.lower().replace("-", " ").replace("_", " ").split():
-            if word:
-                words.add(word)
-
-    # Match against synonyms
-    scores: Dict[str, float] = {}
-
-    for label, synonym_list in config.synonyms.items():
-        matched = 0
-        for synonym in synonym_list:
-            if synonym in words:
-                matched += 1
-
-        if matched > 0:
-            confidence = matched / len(synonym_list)
-            if confidence >= threshold:
-                scores[label] = confidence
-
-    # Sort by confidence descending
-    sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
-    return sorted_labels
-
-
 def reload_config(custom_path: Optional[str] = None) -> LabelsConfig:
     """Reload the global labels config.
 
@@ -356,13 +292,16 @@ def suggest_from_content(
 ) -> List[str]:
     """Suggest labels based on file content using LLM.
 
+    Lower-level function that returns empty list if LLM is not configured
+    (does not raise).
+
     Args:
         content: Text content from the file.
         config: LabelsConfig for taxonomy (provides available labels).
         llm_config: LLMConfig for LLM settings.
 
     Returns:
-        List of suggested label names.
+        List of suggested label names, or empty list if not configured.
     """
     if config is None:
         config = get_config()
@@ -370,7 +309,7 @@ def suggest_from_content(
     if llm_config is None:
         llm_config = LLMConfig.load()
 
-    # Check if LLM is enabled and configured
+    # Return empty if LLM is not configured
     if not llm_config.enabled or not llm_config.api_key:
         return []
 
@@ -378,8 +317,8 @@ def suggest_from_content(
     max_chars = llm_config.max_content_chars
     truncated_content = content[:max_chars] if len(content) > max_chars else content
 
-    # Get available labels from taxonomy
-    available_labels = list(config.synonyms.keys())
+    # Get taxonomy with synonyms (for LLM context)
+    taxonomy = config.synonyms
 
     # Create provider and extract labels
     try:
@@ -388,33 +327,31 @@ def suggest_from_content(
             api_key=llm_config.api_key,
             model=llm_config.model,
         )
-        return provider.extract_labels(truncated_content, available_labels)
+        return provider.extract_labels(truncated_content, taxonomy)
     except Exception:
-        # Silent fallback on any error - return empty list
+        # Return empty on error
         return []
 
 
-def suggest_hybrid(
-    file_path: str,
-    content: Optional[str] = None,
-    use_llm: Optional[bool] = None,
+def suggest_labels(
+    content: str,
     config: Optional[LabelsConfig] = None,
     llm_config: Optional[LLMConfig] = None,
-    threshold: Optional[float] = None,
-) -> Tuple[List[str], str]:
-    """Suggest labels using hybrid approach (LLM + path-based).
+) -> List[str]:
+    """Suggest labels based on file content using LLM only.
+
+    Raises an error if LLM is not configured.
 
     Args:
-        file_path: Path to the file.
-        content: Optional text content for LLM analysis.
-        use_llm: Force LLM usage (True=LLM, False=path only, None=auto from config).
-        config: LabelsConfig for taxonomy.
+        content: Text content from the file.
+        config: LabelsConfig for taxonomy (provides available labels).
         llm_config: LLMConfig for LLM settings.
-        threshold: Confidence threshold for path-based matching.
 
     Returns:
-        Tuple of (labels: List[str], source: str)
-        source is "llm" or "path"
+        List of suggested label names.
+
+    Raises:
+        RuntimeError: If LLM is not enabled or not configured.
     """
     if config is None:
         config = get_config()
@@ -422,16 +359,12 @@ def suggest_hybrid(
     if llm_config is None:
         llm_config = LLMConfig.load()
 
-    # Determine whether to use LLM
-    if use_llm is None:
-        use_llm = llm_config.enabled and bool(llm_config.api_key)
+    # Raise error if LLM is not configured
+    if not llm_config.enabled or not llm_config.api_key:
+        raise RuntimeError(
+            "LLM is not configured. Please enable LLM in config.yaml "
+            "with a valid API key."
+        )
 
-    # Try LLM first if enabled
-    if use_llm and content:
-        llm_labels = suggest_from_content(content, config, llm_config)
-        if llm_labels:
-            return llm_labels, "llm"
-
-    # Fallback to path-based
-    path_labels = suggest_from_path(file_path, config, threshold)
-    return [label for label, _ in path_labels], "path"
+    # Use lower-level function for extraction
+    return suggest_from_content(content, config, llm_config)

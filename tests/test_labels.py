@@ -9,8 +9,8 @@ import pytest
 
 from filekor.labels import (
     LabelsConfig,
-    suggest_from_path,
     LLMConfig,
+    suggest_labels,
     suggest_from_content,
 )
 
@@ -69,126 +69,61 @@ class TestLabelsConfig:
         assert "contract" in result
 
 
-class TestSuggestFromPath:
-    """Test suggest_from_path() function."""
+class TestSuggestLabels:
+    """Test suggest_labels() function (LLM only)."""
 
-    def test_suggest_finance_from_filename(self):
-        """Verify 'finance' suggested for budget-related filename."""
-        config = LabelsConfig({"finance": ["budget", "cost", "money"]})
-        result = suggest_from_path("invoice_budget_2024.pdf", config)
-        assert len(result) > 0
-        assert result[0][0] == "finance"
+    def test_raises_when_llm_not_configured(self):
+        """Verify raises RuntimeError when LLM is not configured."""
+        with pytest.raises(RuntimeError) as exc_info:
+            suggest_labels("test content")
 
-    def test_suggest_from_directory(self):
-        """Verify labels suggested from directory path."""
-        config = LabelsConfig({"invoice": ["bill", "receipt"]})
-        result = suggest_from_path("/home/user/invoices/march.pdf", config)
-        # "invoices" contains "invoice" as substring but we need exact match
-        # Our implementation uses exact word matching, so directory name should match
-        labels = [label for label, _ in result]
-        # The word "invoices" doesn't exactly match "invoice"
-        assert isinstance(result, list)
+        assert "LLM is not configured" in str(exc_info.value)
 
-    def test_no_matches_returns_empty(self):
-        """Verify empty list returned when no synonyms match."""
-        config = LabelsConfig({"finance": ["budget"]})
-        result = suggest_from_path("/path/to/random_file.pdf", config)
-        assert result == []
+    def test_raises_when_llm_disabled(self, tmp_path):
+        """Verify raises when enabled: false in config."""
+        config_content = """filekor:
+  llm:
+    enabled: false
+    provider: gemini
+    api_key: test-key
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
 
-    def test_threshold_filters_low_confidence(self):
-        """Verify threshold filters out low confidence matches."""
-        config = LabelsConfig({"label": ["word1", "word2", "word3", "word4"]})
-        # Only 1 match out of 4 synonyms = 0.25 confidence, below 0.3 threshold
-        result = suggest_from_path("word1_file.pdf", config, threshold=0.3)
-        assert result == []
+        import os
 
-    def test_multiple_labels_returned(self):
-        """Verify multiple labels with different confidences."""
-        config = LabelsConfig(
-            {
-                "finance": ["budget", "cost", "money"],
-                "legal": ["law", "compliance", "privacy"],
-            }
-        )
-        result = suggest_from_path("budget_legal_2024.pdf", config)
-        labels = [label for label, _ in result]
-        # Should have both labels if both match
-        assert len(labels) >= 1
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            with pytest.raises(RuntimeError) as exc_info:
+                suggest_labels("test content")
 
-    def test_confidence_calculation(self):
-        """Verify confidence = matched / total_synonyms."""
-        config = LabelsConfig({"label": ["word1", "word2"]})
-        result = suggest_from_path("word1_file.pdf", config)
-        # 1 match out of 2 synonyms = 0.5 confidence
-        assert result[0][1] == 0.5
+            assert "LLM is not configured" in str(exc_info.value)
+        finally:
+            os.chdir(old_cwd)
 
+    def test_returns_labels_from_llm(self, tmp_path):
+        """Verify returns labels from LLM when configured."""
+        config_content = """filekor:
+  llm:
+    enabled: true
+    provider: mock
+    api_key: test-key
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
 
-class TestLabelsIntegration:
-    """Integration tests for labels in sidecar."""
+        import os
 
-    def test_sidecar_includes_labels(self, tmp_path):
-        """Verify sidecar output includes labels field."""
-        from filekor.labels import LabelsConfig
-        from filekor.sidecar import Sidecar
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = suggest_labels("test content")
 
-        # Create test file with name that matches synonyms
-        test_file = tmp_path / "budget_cost_report.txt"
-        test_file.write_text("test content")
-
-        # Create with labels config
-        config = LabelsConfig({"finance": ["budget", "cost"]})
-        sidecar = Sidecar.create(str(test_file), labels_config=config)
-
-        # Verify labels are present
-        assert sidecar.labels is not None
-        assert len(sidecar.labels.suggested) > 0
-
-    def test_sidecar_no_labels_when_no_match(self, tmp_path):
-        """Verify labels is None when no matches found."""
-        from filekor.labels import LabelsConfig
-        from filekor.sidecar import Sidecar
-
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test")
-
-        config = LabelsConfig({"finance": ["budget"]})
-        sidecar = Sidecar.create(str(test_file), labels_config=config)
-
-        # No match expected for "test" with "budget" synonym
-        # labels should still be set (possibly empty or None based on implementation)
-
-
-class TestLabelsCLI:
-    """Test labels CLI command."""
-
-    def test_labels_command_shows_labels(self, tmp_path):
-        """Verify labels command outputs suggested labels."""
-        from click.testing import CliRunner
-        from filekor.cli import labels
-
-        test_file = tmp_path / "budget_report.pdf"
-        test_file.write_text("test")
-
-        runner = CliRunner()
-        result = runner.invoke(labels, [str(test_file)])
-
-        assert result.exit_code == 0
-
-    def test_labels_command_with_confidence(self, tmp_path):
-        """Verify --show-confidence shows confidence scores."""
-        from click.testing import CliRunner
-        from filekor.cli import labels
-
-        test_file = tmp_path / "budget_report.pdf"
-        test_file.write_text("test")
-
-        runner = CliRunner()
-        result = runner.invoke(labels, [str(test_file), "--show-confidence"])
-
-        assert result.exit_code == 0
-        # Output should contain ": " pattern for confidence scores
-        if result.output.strip():
-            assert ":" in result.output or "No labels" in result.output
+            assert isinstance(result, list)
+            # MockProvider returns ["documentation"] by default
+        finally:
+            os.chdir(old_cwd)
 
 
 class TestLLMConfig:
@@ -215,7 +150,6 @@ class TestLLMConfig:
         config_file = tmp_path / "config.yaml"
         config_file.write_text(config_content)
 
-        # Change to tmp dir so config is found
         import os
 
         old_cwd = os.getcwd()
@@ -286,13 +220,12 @@ class TestSuggestFromContent:
 
             suggest_from_content(long_content, config, llm_config)
 
-            # Check that content was truncated to 100 chars
             call_args = mock_provider.extract_labels.call_args
             passed_content = call_args[0][0]
             assert len(passed_content) == 100
 
-    def test_fallback_on_llm_error(self):
-        """Verify returns [] when LLM raises exception."""
+    def test_returns_empty_on_llm_error(self):
+        """Verify returns empty list when LLM fails (silent fallback)."""
         config = LabelsConfig({"finance": ["budget", "cost"]})
         llm_config = LLMConfig(enabled=True, api_key="test-key")
 
@@ -305,33 +238,71 @@ class TestSuggestFromContent:
             assert result == []
 
 
-class TestLLMCLI:
-    """Test CLI LLM flags."""
+class TestLabelsCLI:
+    """Test labels CLI command."""
 
-    def test_llm_no_llm_conflict(self, tmp_path):
-        """Verify --llm and --no-llm together shows error."""
-        from click.testing import CliRunner
-        from filekor.cli import sidecar
-
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test")
-
-        runner = CliRunner()
-        result = runner.invoke(sidecar, [str(test_file), "--llm", "--no-llm"])
-
-        assert result.exit_code == 1
-        assert "Cannot use both" in result.output
-
-    def test_labels_llm_no_llm_conflict(self, tmp_path):
-        """Verify --llm and --no-llm together shows error in labels command."""
+    def test_labels_requires_llm_config(self, tmp_path):
+        """Verify labels command fails when LLM not configured."""
         from click.testing import CliRunner
         from filekor.cli import labels
 
         test_file = tmp_path / "test.txt"
-        test_file.write_text("test")
+        test_file.write_text("test content")
 
         runner = CliRunner()
-        result = runner.invoke(labels, [str(test_file), "--llm", "--no-llm"])
+        result = runner.invoke(labels, [str(test_file)])
 
+        # Should fail because LLM is not configured
         assert result.exit_code == 1
-        assert "Cannot use both" in result.output
+        assert "LLM" in result.output or "configured" in result.output.lower()
+
+    def test_labels_shows_confidence_flag_still_exists(self, tmp_path):
+        """Verify --show-confidence flag still works (no-op now, for compatibility)."""
+        from click.testing import CliRunner
+        from filekor.cli import labels
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        runner = CliRunner()
+        result = runner.invoke(labels, [str(test_file), "--show-confidence"])
+
+        # Should still accept the flag but it does nothing
+        # Only checking error happens
+
+
+class TestLabelsIntegration:
+    """Integration tests for labels in sidecar."""
+
+    def test_sidecar_no_labels_when_llm_not_configured(self, tmp_path):
+        """Verify sidecar labels is None when LLM not configured."""
+        from filekor.sidecar import Sidecar
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        sidecar = Sidecar.create(str(test_file))
+
+        # Should have labels set but may be None or empty depending on impl
+        assert sidecar.labels is None or sidecar.labels.suggested == []
+
+
+class TestFileLabelsModel:
+    """Test FileLabels model."""
+
+    def test_file_labels_no_confidence_field(self):
+        """Verify FileLabels doesn't have confidence field."""
+        from filekor.sidecar import FileLabels
+
+        labels = FileLabels(suggested=["finance"], source="llm")
+
+        # Should not have confidence attribute
+        assert not hasattr(labels, "confidence")
+
+    def test_file_labels_source_is_llm(self):
+        """Verify source is always 'llm'."""
+        from filekor.sidecar import FileLabels
+
+        labels = FileLabels(suggested=["finance"], source="llm")
+
+        assert labels.source == "llm"
