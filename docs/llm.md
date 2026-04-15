@@ -2,6 +2,15 @@
 
 fileKor uses an LLM (Google Gemini) to extract labels based on file content. LLM must be configured before use.
 
+## Config File Search Order
+
+The tool searches for `config.yaml` in this order:
+
+1. Custom path (via `--config` flag)
+2. `config.yaml` in current directory
+3. `.filekor/config.yaml`
+4. `~/.filekor/config.yaml`
+
 ## Setup
 
 ### 1. Create config file
@@ -46,9 +55,26 @@ Or use `${VAR}` syntax in config.yaml to set directly from environment.
 # Generate sidecar with LLM labels
 filekor sidecar documento.pdf
 
-# Suggest labels
-filekor labels documento.pdf
+# Custom config.yaml
+filekor sidecar documento.pdf --config /path/to/config.yaml
+
+# Suggest labels (REQUIRED LLM config, will fail if not configured)
+filekor labels documento.pdf --llm-config /path/to/config.yaml
 ```
+
+## Behavior
+
+| LLM Config Status | Sidecar Command | Labels Command |
+|--------------------|----------------|----------------|
+| Not configured | Generates without labels | ❌ Error |
+| Configured, invalid API key | ❌ Error (fails) | ❌ Error (fails) |
+| Configured, valid API key | ✅ With labels | ✅ With labels |
+
+## Error Handling
+
+If LLM is not configured:
+- **sidecar**: Generates without labels, continues normally
+- **labels**: Fails with error (user explicitly requested labels)
 
 ## How It Works
 

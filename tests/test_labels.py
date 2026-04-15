@@ -72,12 +72,20 @@ class TestLabelsConfig:
 class TestSuggestLabels:
     """Test suggest_labels() function (LLM only)."""
 
-    def test_raises_when_llm_not_configured(self):
+    def test_raises_when_llm_not_configured(self, tmp_path):
         """Verify raises RuntimeError when LLM is not configured."""
-        with pytest.raises(RuntimeError) as exc_info:
-            suggest_labels("test content")
+        # Create empty config in tmp_path BEFORE calling
+        import os
 
-        assert "LLM is not configured" in str(exc_info.value)
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            # Now with no config files in tmp_path, should raise
+            with pytest.raises(RuntimeError) as exc_info:
+                suggest_labels("test content")
+            assert "LLM is not configured" in str(exc_info.value)
+        finally:
+            os.chdir(old_cwd)
 
     def test_raises_when_llm_disabled(self, tmp_path):
         """Verify raises when enabled: false in config."""
@@ -129,13 +137,20 @@ class TestSuggestLabels:
 class TestLLMConfig:
     """Test LLMConfig class."""
 
-    def test_load_defaults_when_no_config(self):
+    def test_load_defaults_when_no_config(self, tmp_path):
         """Verify load() returns defaults when no config file exists."""
-        config = LLMConfig.load()
-        assert config.enabled is False
-        assert config.provider == "gemini"
-        assert config.model == "gemini-2.0-flash"
-        assert config.max_content_chars == 1500
+        import os
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            config = LLMConfig.load()
+            assert config.enabled is False
+            assert config.provider == "gemini"
+            assert config.model == "gemini-2.0-flash"
+            assert config.max_content_chars == 1500
+        finally:
+            os.chdir(old_cwd)
 
     def test_load_parses_config_file(self, tmp_path):
         """Verify load() parses config.yaml correctly."""
@@ -243,18 +258,26 @@ class TestLabelsCLI:
 
     def test_labels_requires_llm_config(self, tmp_path):
         """Verify labels command fails when LLM not configured."""
+        import os
         from click.testing import CliRunner
         from filekor.cli import labels
 
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test content")
+        # Change to tmp_path to isolate from project config.yaml
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
 
-        runner = CliRunner()
-        result = runner.invoke(labels, [str(test_file)])
+            test_file = tmp_path / "test.txt"
+            test_file.write_text("test content")
 
-        # Should fail because LLM is not configured
-        assert result.exit_code == 1
-        assert "LLM" in result.output or "configured" in result.output.lower()
+            runner = CliRunner()
+            result = runner.invoke(labels, [str(test_file)])
+
+            # Should fail because LLM is not configured
+            assert result.exit_code == 1
+            assert "LLM" in result.output or "configured" in result.output.lower()
+        finally:
+            os.chdir(old_cwd)
 
     def test_labels_shows_confidence_flag_still_exists(self, tmp_path):
         """Verify --show-confidence flag still works (no-op now, for compatibility)."""

@@ -236,24 +236,31 @@ class LLMConfig:
         self.max_content_chars = max_content_chars
 
     @classmethod
-    def load(cls) -> "LLMConfig":
+    def load(cls, custom_path: Optional[str] = None) -> "LLMConfig":
         """Load LLM config from config.yaml.
 
         Searches in:
-        1. Current directory
-        2. .filekor/ in current directory
-        3. ~/.filekor/config.yaml
+        1. Custom path (if provided)
+        2. Current directory
+        3. .filekor/ in current directory
+        4. ~/.filekor/config.yaml
+
+        Args:
+            custom_path: Optional path to a custom config.yaml file.
 
         Returns:
             LLMConfig instance.
         """
         import yaml
 
-        search_paths = [
-            Path("config.yaml"),
-            Path(".filekor/config.yaml"),
-            Path.home() / ".filekor" / "config.yaml",
-        ]
+        if custom_path:
+            search_paths = [Path(custom_path)]
+        else:
+            search_paths = [
+                Path("config.yaml"),
+                Path(".filekor/config.yaml"),
+                Path.home() / ".filekor" / "config.yaml",
+            ]
 
         for search_path in search_paths:
             if search_path.exists():

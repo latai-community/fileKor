@@ -7,8 +7,11 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
+from rich.console import Console
 
-from filekor.labels import suggest_labels, LabelsConfig, LLMConfig
+from filekor.labels import suggest_labels, suggest_from_content, LabelsConfig, LLMConfig
+
+console = Console()
 
 
 class FileInfo(BaseModel):
@@ -159,22 +162,26 @@ class Sidecar(BaseModel):
         content: Optional[Content] = None,
         labels_config: Optional[LabelsConfig] = None,
         text_content: Optional[str] = None,
+        verbose: bool = False,
     ) -> "Sidecar":
-        """Create a new Sidecar instance.
+        """Create a new Sidecar instance (WITHOUT labels).
 
         Args:
             file_path: Path to the source file.
             metadata: Extracted metadata dictionary.
             content: Optional Content object with text extraction info.
-            labels_config: Optional LabelsConfig for auto-labeling.
-            text_content: Optional extracted text content for LLM-based labeling.
+            labels_config: Ignored (kept for compatibility).
+            text_content: Ignored (labels added via explicit 'labels' command).
+            verbose: Show detailed output.
 
         Returns:
             A new Sidecar instance with computed file info and current timestamp.
 
-        Raises:
-            RuntimeError: If LLM is not configured and labels_config is provided.
+        Note:
+            Labels are NOT auto-generated. Use 'filekor labels' command to add labels.
         """
+        import click
+
         path = Path(file_path)
 
         file_info = FileInfo(
@@ -199,25 +206,17 @@ class Sidecar(BaseModel):
                     pages=pages,
                 )
 
-        # Auto-populate labels if config is provided
-        labels = None
-        if labels_config and text_content:
-            # Use LLM only for label extraction
-            suggested_labels = suggest_labels(
-                content=text_content,
-                config=labels_config,
+        # No labels auto-generated - labels added via 'filekor labels' command
+        if verbose:
+            console.print(
+                "[yellow]Labels:[/yellow] not generated (use 'filekor labels' to add)"
             )
-            if suggested_labels:
-                labels = FileLabels(
-                    suggested=suggested_labels,
-                    source="llm",
-                )
 
         return cls(
             file=file_info,
             metadata=extracted_meta,
             content=content,
-            labels=labels,
+            labels=None,
             generated_at=datetime.now(timezone.utc),
         )
 
@@ -236,3 +235,69 @@ class Sidecar(BaseModel):
             for chunk in iter(lambda: f.read(8192), b""):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
+
+    @classmethod
+    def load(cls, path: str) -> "Sidecar":
+        """Load a .kor sidecar file from disk.
+
+        Args:
+            path: Path to the .kor file.
+
+        Returns:
+            Loaded Sidecar instance.
+
+        Raises:
+            FileNotFoundError: If .kor file does not exist.
+            ValueError: If .kor file is invalid YAML.
+        """
+        import yaml
+
+        kor_path = Path(path)
+        if not kor_path.exists():
+            raise FileNotFoundError(f"Sidecar file not found: {path}")
+
+        try:
+            data = yaml.safe_load(kor_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid sidecar file: {e}")
+
+        # Reconstruct Sidecar from YAML data
+        file_data = data.get("file", {})
+        metadata_data = data.get("metadata")
+        content_data = data.get("content")
+        labels_data = data.get("labels")
+
+        file_info = FileInfo(**file_data)
+
+        extracted_meta = None
+        if metadata_data:
+            extracted_meta = FileMetadata(**metadata_data)
+
+        content_obj = None
+        if content_data:
+            content_obj = Content(**content_data)
+
+        labels_obj = None
+        if labels_data:
+            labels_obj = FileLabels(**labels_data)
+
+        return cls(
+            version=data.get("version", "1.0"),
+            file=file_info,
+            metadata=extracted_meta,
+            content=content_obj,
+            labels=labels_obj,
+            parser_status=data.get("parser_status", "OK"),
+            generated_at=data.get("generated_at"),
+        )
+
+    def update_labels(self, labels: List[str]) -> None:
+        """Update labels in this sidecar (in-place).
+
+        Args:
+            labels: New list of labels.
+        """
+        self.labels = FileLabels(
+            suggested=labels,
+            source="llm",
+        )

@@ -51,6 +51,9 @@ filekor sidecar documento.pdf
 # Custom output path
 filekor sidecar documento.pdf -o metadata.kor
 
+# Custom config.yaml for LLM
+filekor sidecar documento.pdf --config /path/to/config.yaml
+
 # Force regeneration
 filekor sidecar documento.pdf --no-cache
 ```
@@ -93,8 +96,11 @@ Suggest taxonomy labels for a file using LLM.
 # Suggest labels
 filekor labels documento.pdf
 
-# Custom taxonomy config
-filekor labels documento.pdf -c custom-labels.properties
+# Custom taxonomy config (labels.properties)
+filekor labels documento.pdf --config custom-labels.properties
+
+# Custom LLM config (config.yaml)
+filekor labels documento.pdf --llm-config /path/to/config.yaml
 
 # Show help
 filekor labels --help

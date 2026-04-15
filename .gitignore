@@ -210,5 +210,7 @@ __marimo__/
 tmp/
 sdd/
 openspec/
+specs/
 *.kor
 .atl
+config.yaml/
