@@ -1,0 +1,96 @@
+"""Database models for filekor SQLite storage.
+
+This module contains Pydantic models for database records, used for
+type safety and validation when working with the SQLite backend.
+"""
+
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+
+from pydantic import BaseModel
+
+
+class DBFile(BaseModel):
+    """Database model for file records.
+
+    Attributes:
+        id: Primary key (auto-incrementing).
+        kor_path: Path to the .kor file (unique).
+        file_path: Path to the source file.
+        name: File name.
+        extension: File extension.
+        size_bytes: File size in bytes.
+        modified_at: Last modification timestamp.
+        hash_sha256: SHA256 hash of the file.
+        metadata_json: JSON string with additional metadata.
+        created_at: When the record was created.
+        updated_at: When the record was last updated.
+    """
+
+    id: Optional[int] = None
+    kor_path: str
+    file_path: str
+    name: str
+    extension: Optional[str] = None
+    size_bytes: Optional[int] = None
+    modified_at: Optional[datetime] = None
+    hash_sha256: Optional[str] = None
+    metadata_json: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        """Pydantic config."""
+
+        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+
+
+class DBLabel(BaseModel):
+    """Database model for label records.
+
+    Attributes:
+        id: Primary key (auto-incrementing).
+        file_id: Foreign key to files table.
+        label: The label name.
+        confidence: Confidence score (0-1).
+        source: Source of the label (e.g., 'llm', 'manual').
+        created_at: When the label was created.
+    """
+
+    id: Optional[int] = None
+    file_id: int
+    label: str
+    confidence: Optional[float] = None
+    source: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        """Pydantic config."""
+
+        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+
+
+class DBCollection(BaseModel):
+    """Database model for collection records.
+
+    Collections are logical groupings of files with labels.
+    This is a future expansion point for query capabilities.
+
+    Attributes:
+        id: Primary key (auto-incrementing).
+        name: Collection name.
+        query: Query string or filter criteria.
+        created_at: When the collection was created.
+        updated_at: When the collection was last updated.
+    """
+
+    id: Optional[int] = None
+    name: str
+    query: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        """Pydantic config."""
+
+        json_encoders = {datetime: lambda v: v.isoformat() if v else None}

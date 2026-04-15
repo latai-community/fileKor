@@ -1,0 +1,23 @@
+{
+  "title": "Sample JSON Document",
+  "description": "A JSON file for testing fileKor",
+  "version": "1.0.0",
+  "author": {
+    "name": "Test Author",
+    "email": "test@example.com",
+    "organization": "Test Corp"
+  },
+  "features": [
+    "Text extraction",
+    "LLM labeling", 
+    "Metadata parsing"
+  ],
+  "settings": {
+    "mode": "production",
+    "debug": false,
+    "maxConnections": 10
+  },
+  "tags": ["json", "data", "configuration"],
+  "created": "2026-04-15",
+  "modified": "2026-04-15"
+}

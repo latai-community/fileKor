@@ -436,6 +436,28 @@ def sidecar(
     sys.exit(0)
 
 
+def _auto_sync_hook(sidecar_path: Path, llm_config: LLMConfig, verbose: bool) -> None:
+    """Auto-sync sidecar to database if enabled.
+
+    Args:
+        sidecar_path: Path to the .kor sidecar file.
+        llm_config: LLM configuration containing auto_sync setting.
+        verbose: Whether to show verbose output.
+    """
+    if not llm_config.auto_sync:
+        return
+
+    try:
+        from filekor.db import sync_file
+
+        sync_file(str(sidecar_path))
+        if verbose:
+            console.print(f"[green]Synced to DB:[/green] {sidecar_path.name}")
+    except Exception as e:
+        if verbose:
+            console.print(f"[yellow]DB sync warning: {e}[/yellow]")
+
+
 def _sidecar_file(
     path: str,
     output: Optional[str],
@@ -475,11 +497,14 @@ def _sidecar_file(
         click.echo(f"Error: Unsupported file type: .{file_ext}", err=True)
         sys.exit(1)
 
-    # Output path: .kor extension
+    # Output path: .kor extension in .filekor/ subdirectory
     if output:
         sidecar_path = Path(output)
     else:
-        sidecar_path = file_path.with_suffix(".kor")
+        # Create in .filekor/ subdirectory (consistent with directory processing)
+        filekor_dir = file_path.parent / ".filekor"
+        filekor_dir.mkdir(parents=True, exist_ok=True)
+        sidecar_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
 
     if sidecar_path.exists() and not no_cache:
         click.echo(f"Info: Sidecar already exists: {sidecar_path}", err=True)
@@ -532,6 +557,9 @@ def _sidecar_file(
     sidecar_path.write_text(sidecar.to_yaml())
 
     console.print(f"[bold green]Created:[/bold green] {sidecar_path}")
+
+    # Auto-sync to database if enabled
+    _auto_sync_hook(sidecar_path, llm_config, verbose)
 
 
 def _sidecar_directory(
@@ -767,6 +795,9 @@ def _labels_file(
 
     console.print(f"[bold green]Saved: {kor_path}[/bold green]")
 
+    # Auto-sync to database if enabled
+    _auto_sync_hook(kor_path, llm_config_obj, verbose=False)
+
 
 def _labels_directory(
     directory: str,
@@ -863,6 +894,9 @@ def _labels_directory(
                 console.print(
                     f"[green]OK[/green] {file_path.name}: {', '.join(labels) if labels else 'no labels'}"
                 )
+                # Auto-sync to database if enabled
+                kor_path = file_path.with_suffix(".kor")
+                _auto_sync_hook(kor_path, llm_config_obj, verbose=False)
             else:
                 failed += 1
                 emitter.error(str(file_path), error)

@@ -59,15 +59,17 @@ class DirectoryProcessor:
         Returns:
             Path for the .kor output file.
         """
+        # Include extension in filename to avoid collisions (e.g., sample.json.kor, sample.md.kor)
+        ext = input_path.suffix.lstrip(".").lower()
         if self.output_dir:
             # Ensure output directory exists
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            return self.output_dir / f"{input_path.stem}.kor"
+            return self.output_dir / f"{input_path.stem}.{ext}.kor"
         else:
             # Default: .filekor/ subdirectory next to the file
             filekor_dir = input_path.parent / ".filekor"
             filekor_dir.mkdir(parents=True, exist_ok=True)
-            return filekor_dir / f"{input_path.stem}.kor"
+            return filekor_dir / f"{input_path.stem}.{ext}.kor"
 
     def process_file(self, file_path: Path) -> ProcessResult:
         """Process a single file.

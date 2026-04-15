@@ -19,6 +19,7 @@ source .venv/bin/activate
 | `extract` | Extract text content from supported files |
 | `sidecar` | Generate .kor sidecar file with metadata |
 | `labels` | Add taxonomy labels to a file |
+| `status` | Show status of .kor files |
 | `process` | Legacy - extract metadata |
 
 ---
@@ -33,6 +34,9 @@ filekor extract <path>
 # Extract to file
 filekor extract <path> -o <output>
 
+# Process directory recursively
+filekor extract ./documentos/ --dir
+
 # Show help
 filekor extract --help
 ```
@@ -41,6 +45,7 @@ filekor extract --help
 | Option | Description |
 |--------|-------------|
 | `-o`, `--output` | Output file path |
+| `-d`, `--dir` | Process directory instead of single file |
 
 ---
 
@@ -54,6 +59,9 @@ filekor sidecar <path>
 # Custom output path
 filekor sidecar <path> -o <output>
 
+# Process directory recursively
+filekor sidecar ./documentos/ --dir
+
 # Force regeneration (ignore existing .kor)
 filekor sidecar <path> --no-cache
 
@@ -62,6 +70,9 @@ filekor sidecar <path> -c <config.yaml>
 
 # Verbose output
 filekor sidecar <path> --verbose
+
+# Watch mode for real-time progress
+filekor sidecar ./documentos/ --dir --watch
 ```
 
 **Options:**
@@ -71,8 +82,11 @@ filekor sidecar <path> --verbose
 | `--no-cache` | Force regeneration |
 | `-c`, `--config` | Custom config.yaml path |
 | `-v`, `--verbose` | Show detailed output |
+| `-d`, `--dir` | Process directory instead of single file |
+| `--workers` | Number of parallel workers (from config.yaml) |
+| `--watch` | Enable event emitter for real-time progress |
 
-**Output:** Creates `{filename}.kor` in same directory.
+**Output:** Creates `{filename}.kor` in same directory. For directory: creates `.filekor/` subdirectory with .kor files.
 
 ---
 
@@ -89,8 +103,11 @@ filekor labels <path> --llm-config <config.yaml>
 # With custom taxonomy (labels.properties)
 filekor labels <path> -c <labels.properties>
 
-# Verbose output
-filekor labels <path> --verbose
+# Process directory recursively
+filekor labels ./documentos/ --dir
+
+# Watch mode for real-time progress
+filekor labels ./documentos/ --dir --watch
 ```
 
 **Options:**
@@ -98,7 +115,9 @@ filekor labels <path> --verbose
 |--------|-------------|
 | `-c`, `--config` | Custom labels.properties path |
 | `--llm-config` | Custom config.yaml path |
-| `-v`, `--verbose` | Show detailed output |
+| `-d`, `--dir` | Process directory instead of single file |
+| `--workers` | Number of parallel workers (from config.yaml) |
+| `--watch` | Enable event emitter for real-time progress |
 
 **Behavior:**
 - If `.kor` exists: loads it and adds/replaces labels
@@ -113,6 +132,28 @@ code
 Loading existing: documento.kor
 Saved: documento.kor
 ```
+
+---
+
+## Status
+
+Show status of .kor files for a file or directory.
+
+```bash
+filekor status <path>
+
+# Show status for directory
+filekor status ./documentos/ --dir
+
+# Watch mode for real-time updates
+filekor status ./documentos/ --dir --watch
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-d`, `--dir` | Show status for directory instead of single file |
+| `--watch` | Enable watch mode for real-time updates |
 
 ---
 
@@ -173,3 +214,71 @@ filekor labels documento.pdf -c /path/to/labels.properties
 filekor sidecar documento.pdf --verbose
 filekor labels documento.pdf --verbose
 ```
+
+### Directory processing
+
+```bash
+# Process entire directory
+filekor sidecar ./documentos/ --dir
+
+# With custom workers
+filekor sidecar ./documentos/ --dir --workers 8
+
+# Watch mode for real-time progress
+filekor sidecar ./documentos/ --dir --watch
+
+# Add labels to all files
+filekor labels ./documentos/ --dir
+
+# Check status of processed files
+filekor status ./documentos/ --dir
+```
+
+---
+
+## Database
+
+filekor includes a SQLite database for indexing and querying files by labels.
+
+### Configuration
+
+Enable auto-sync in `config.yaml`:
+
+```yaml
+llm:
+  provider: gemini
+  api_key: ${GEMINI_API_KEY}
+  model: gemini-1.5-flash
+  auto_sync: true  # Auto-sync to database on sidecar/labels commands
+```
+
+When `auto_sync: true`, the database at `~/.filekor/index.db` is automatically updated when using `filekor sidecar` or `filekor labels` commands.
+
+### Library Usage
+
+Use filekor as a Python library for database queries:
+
+```python
+from filekor.db import get_db, sync_file, query_by_label
+
+# Get database instance (lazy singleton - created on first call)
+db = get_db()
+
+# Manually sync a .kor file
+sync_file("./documento.kor")
+
+# Query files by label
+files = query_by_label("finance")
+# ['/docs/report.pdf', '/docs/invoice.pdf']
+
+# Query all files
+all_files = db.query_all()
+```
+
+### Database Schema
+
+The SQLite database includes:
+
+- **files** - File metadata (path, hash, timestamps)
+- **labels** - Associated labels with confidence scores
+- **schema_version** - Migration tracking

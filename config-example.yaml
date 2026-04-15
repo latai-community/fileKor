@@ -5,3 +5,4 @@ filekor:
     api_key: 
     model: 
     max_content_chars: 1500
+    auto_sync: false  # Enable to auto-sync metadata to SQLite database

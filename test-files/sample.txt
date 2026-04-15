@@ -1,0 +1,22 @@
+This is a plain text file for testing fileKor.
+
+It contains multiple lines of text to test text extraction.
+The content should be extracted and used for LLM label generation.
+
+Title: Sample Text Document
+Author: Test Author
+Date: 2026-04-15
+Category: documentation
+
+This document has some metadata embedded in the content itself.
+It can be used to test the LLM labeling functionality.
+
+More content here...
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+
+Additional information:
+- System: Windows 11
+- Version: 1.0
+- Status: Active

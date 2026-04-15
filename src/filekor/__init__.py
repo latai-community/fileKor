@@ -6,6 +6,8 @@ from filekor.sidecar import Sidecar, FileInfo, FileMetadata, Content
 from filekor.labels import LabelsConfig, LLMConfig, suggest_labels
 from filekor.processor import DirectoryProcessor, process_directory, ProcessResult
 from filekor.events import EventEmitter, EventType, FilekorEvent, create_emitter
+from filekor.db import get_db, sync_file, query_by_label, query_all, close_db, Database
+from filekor.models import DBFile, DBLabel, DBCollection
 from filekor import status
 
 __all__ = [
@@ -24,4 +26,14 @@ __all__ = [
     "FilekorEvent",
     "create_emitter",
     "status",
+    # Database exports
+    "get_db",
+    "sync_file",
+    "query_by_label",
+    "query_all",
+    "close_db",
+    "Database",
+    "DBFile",
+    "DBLabel",
+    "DBCollection",
 ]

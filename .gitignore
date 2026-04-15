@@ -214,3 +214,4 @@ specs/
 *.kor
 .atl
 config.yaml
+*/.filekor/

@@ -13,11 +13,31 @@ uv venv
 .venv\Scripts\activate
 uv pip install -e .
 
-# Use
+# CLI Usage
 filekor extract documento.pdf
 filekor sidecar documento.pdf
 filekor labels documento.pdf
 ```
+
+## Library Usage
+
+filekor can also be used as a Python library for database-backed queries:
+
+```python
+from filekor.db import get_db, sync_file, query_by_label
+
+# Get database instance (lazy singleton)
+db = get_db()
+
+# Sync a .kor file to the database
+sync_file("./documento.kor")
+
+# Query files by label
+files = query_by_label("finance")
+# ['/docs/report.pdf', '/docs/invoice.pdf']
+```
+
+Enable auto-sync in `config.yaml` to automatically update the database when using CLI commands.
 
 ## Features
 
@@ -25,6 +45,8 @@ filekor labels documento.pdf
 - **Text Extraction** - Extract and summarize text content from supported files
 - **LLM-based Labeling** - Classify files using LLM (Gemini) with content analysis
 - **Sidecar Generation** - Generate YAML sidecar files (.kor) with full metadata
+- **Database Indexing** - SQLite backend for querying files by labels
+- **Library API** - Use filekor as a Python library
 - **CLI Interface** - Simple command-line interface with multiple commands
 
 ## Documentation
@@ -43,6 +65,8 @@ filekor labels documento.pdf
 fileKor/
 ├── src/filekor/       # Source code
 │   ├── cli.py        # CLI interface
+│   ├── db.py         # Database module (SQLite)
+│   ├── models.py     # Database models
 │   ├── sidecar.py    # Sidecar model
 │   ├── labels.py     # Labels module
 │   └── llm.py       # LLM providers
