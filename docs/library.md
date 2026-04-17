@@ -30,6 +30,7 @@ sync_file("./document.kor")
 # Search files by labels and content with scoring
 results = search_files(
     labels=["finance", "2026"],
+    # Query is internal interpreted as "budget report" or "report budget", Order is not relevant
     query="budget report"
 )
 
