@@ -4,12 +4,11 @@ import hashlib
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 from rich.console import Console
 
-from filekor.labels import suggest_labels, suggest_from_content, LabelsConfig, LLMConfig
 
 console = Console()
 
@@ -39,13 +38,6 @@ class Content(BaseModel):
     language: Optional[str] = None
     word_count: Optional[int] = None
     page_count: Optional[int] = None
-
-
-class FileContent(BaseModel):
-    """Optional content information (legacy compatibility)."""
-
-    language: Optional[str] = None
-    word_count: Optional[int] = None
 
 
 class FileSummary(BaseModel):
@@ -158,20 +150,16 @@ class Sidecar(BaseModel):
     def create(
         cls,
         file_path: str,
-        metadata: Optional[Dict] = None,
+        metadata: Optional[FileMetadata] = None,
         content: Optional[Content] = None,
-        labels_config: Optional[LabelsConfig] = None,
-        text_content: Optional[str] = None,
         verbose: bool = False,
     ) -> "Sidecar":
         """Create a new Sidecar instance (WITHOUT labels).
 
         Args:
             file_path: Path to the source file.
-            metadata: Extracted metadata dictionary.
+            metadata: Optional FileMetadata object with extracted metadata.
             content: Optional Content object with text extraction info.
-            labels_config: Ignored (kept for compatibility).
-            text_content: Ignored (labels added via explicit 'labels' command).
             verbose: Show detailed output.
 
         Returns:
@@ -180,7 +168,6 @@ class Sidecar(BaseModel):
         Note:
             Labels are NOT auto-generated. Use 'filekor labels' command to add labels.
         """
-        import click
 
         path = Path(file_path)
 
@@ -193,18 +180,8 @@ class Sidecar(BaseModel):
             hash_sha256=cls._compute_hash(path),
         )
 
-        extracted_meta = None
-        if metadata:
-            author = metadata.get("author")
-            created = metadata.get("created")
-            pages = metadata.get("pages")
-
-            if author or created or pages:
-                extracted_meta = FileMetadata(
-                    author=author,
-                    created=created,
-                    pages=pages,
-                )
+        if metadata and content and content.page_count is not None:
+            metadata.pages = content.page_count
 
         # No labels auto-generated - labels added via 'filekor labels' command
         if verbose:
@@ -214,7 +191,7 @@ class Sidecar(BaseModel):
 
         return cls(
             file=file_info,
-            metadata=extracted_meta,
+            metadata=metadata,
             content=content,
             labels=None,
             generated_at=datetime.now(timezone.utc),

@@ -101,7 +101,7 @@ class TestSidecar:
             temp_path = f.name
 
         try:
-            sidecar = Sidecar.create(temp_path, {"author": "Test Author"})
+            sidecar = Sidecar.create(temp_path, FileMetadata(author="Test Author"))
             assert sidecar.file is not None
             assert sidecar.metadata is not None
             assert sidecar.metadata.author == "Test Author"

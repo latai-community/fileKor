@@ -1,6 +1,9 @@
 """Base adapter interface for metadata extraction."""
+
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Optional
+
+from filekor.sidecar import FileMetadata
 
 
 class MetadataAdapter(ABC):
@@ -19,13 +22,13 @@ class MetadataAdapter(ABC):
         pass
 
     @abstractmethod
-    def extract_metadata(self, path: str) -> Dict[str, str]:
+    def extract_metadata(self, path: str) -> Optional[FileMetadata]:
         """Extract metadata from a file.
 
         Args:
             path: Path to the file to extract metadata from.
 
         Returns:
-            Dictionary of metadata key-value pairs.
+            FileMetadata object with extracted metadata, or None if extraction failed.
         """
         pass

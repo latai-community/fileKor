@@ -446,10 +446,8 @@ def _sidecar_file(
 
     # Extract text content
     content_obj = None
-    text_content = None
     try:
-        text, word_count, page_count = extract_text(path)
-        text_content = text  # Save for LLM
+        _, word_count, page_count = extract_text(path)
         content_obj = Content(
             language="en",  # Could detect language, default to "en"
             word_count=word_count,
@@ -469,8 +467,6 @@ def _sidecar_file(
         path,
         metadata=metadata,
         content=content_obj,
-        labels_config=LabelsConfig.load(),
-        text_content=text_content,
         verbose=verbose,
     )
 

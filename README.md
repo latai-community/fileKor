@@ -8,9 +8,19 @@ Local metadata engine that extracts, summarizes, classifies, and tags files usin
 # Install uv
 winget install astral-sh.uv
 
+
+git clone filekor 
+
+cd filekor
+
 # Setup
 uv venv
+
+# Windows
 .venv\Scripts\activate
+# MacOS/Linux
+source venv/bin/activate
+
 uv pip install -e .
 
 # CLI Usage
