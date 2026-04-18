@@ -117,7 +117,6 @@ class TestOpenAIProvider:
     def test_extract_labels_returns_valid_labels(self):
         """Test OpenAI provider extracts and filters labels."""
         with patch("openai.OpenAI") as mock_openai_class:
-            # Setup mock client
             mock_client = MagicMock()
             mock_openai_class.return_value = mock_client
             mock_response = MagicMock()

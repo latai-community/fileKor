@@ -1,26 +1,10 @@
 """Delete module for removing .kor files and database records."""
 
-import hashlib
 from pathlib import Path
 from typing import List, Literal, Optional
 
 from filekor.db import delete_file_by_hash as db_delete_by_hash
-
-
-def calculate_sha256(path: str) -> str:
-    """Calculate SHA256 for a file.
-
-    Args:
-        path: Path to the file.
-
-    Returns:
-        SHA256 hex digest.
-    """
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
+from filekor.hasher import calculate_sha256
 
 
 def delete_by_sha(

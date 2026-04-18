@@ -10,6 +10,7 @@ from rich.progress import Progress
 from rich.table import Table
 
 from filekor.adapters.exiftool import PyExifToolAdapter
+from filekor.hasher import calculate_sha256
 from filekor.labels import LabelsConfig, suggest_labels, LLMConfig
 from filekor.sidecar import Content, Sidecar
 from filekor.processor import (
@@ -1438,14 +1439,6 @@ def delete(
         target_scope = "file"
     elif all:
         target_scope = "all"
-
-    def calculate_sha256(file_path: str) -> str:
-        """Calculate SHA256 for a file."""
-        h = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-        return h.hexdigest()
 
     def get_target_hashes() -> List[str]:
         """Get list of target hashes to delete."""
