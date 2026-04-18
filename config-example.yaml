@@ -1,8 +1,9 @@
 filekor:
   llm:
     enabled: true
-    provider: 
-    api_key: 
-    model: 
+    provider: PROVIDER_NAME_HERE
+    api_key: API_KEY_HERE
+    auto_sync: true
+    model: MODEL_NAME_HERE
     max_content_chars: 1500
-    auto_sync: false  # Enable to auto-sync metadata to SQLite database
+  workers: 4
