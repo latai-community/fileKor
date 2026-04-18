@@ -400,6 +400,47 @@ class Database:
                 return DBFile(**dict(row))
             return None
 
+    def get_file_by_hash(self, hash_sha256: str) -> Optional[Dict[str, Any]]:
+        """Get file metadata from database by SHA256 hash.
+
+        Args:
+            hash_sha256: The SHA256 hash of the file.
+
+        Returns:
+            Dictionary with file metadata or None if not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM files WHERE hash_sha256 = ?", (hash_sha256,)
+            )
+            row = cursor.fetchone()
+            if row:
+                row_dict = dict(row)
+                # Get labels for this file
+                labels_cursor = conn.execute(
+                    "SELECT label FROM labels WHERE file_id = ?", (row["id"],)
+                )
+                labels = [r["label"] for r in labels_cursor.fetchall()]
+                row_dict["labels"] = labels
+                return row_dict
+            return None
+
+    def delete_file_by_hash(self, hash_sha256: str) -> int:
+        """Delete file from database by SHA256 hash.
+
+        Args:
+            hash_sha256: The SHA256 hash of the file to delete.
+
+        Returns:
+            Number of records deleted.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM files WHERE hash_sha256 = ?", (hash_sha256,)
+            )
+            conn.commit()
+            return cursor.rowcount
+
     def get_labels_for_file(self, file_id: int) -> List[DBLabel]:
         """Get all labels for a file.
 
@@ -821,3 +862,49 @@ def close_db(db: Optional[Database] = None) -> None:
     if db is None:
         db = get_db()
     db.close()
+
+
+def get_file_by_hash(
+    hash_sha256: str, db: Optional[Database] = None
+) -> Optional[Dict[str, Any]]:
+    """Get file metadata from database by SHA256 hash.
+
+    Args:
+        hash_sha256: The SHA256 hash of the file.
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        Dictionary with file metadata or None if not found.
+    """
+    if db is None:
+        db = get_db()
+    return db.get_file_by_hash(hash_sha256)
+
+
+def get_all_files(db: Optional[Database] = None) -> List[Dict[str, Any]]:
+    """Get all files from database.
+
+    Args:
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        List of dictionaries with file info and labels.
+    """
+    if db is None:
+        db = get_db()
+    return db.query_all()
+
+
+def delete_file_by_hash(hash_sha256: str, db: Optional[Database] = None) -> int:
+    """Delete file from database by SHA256 hash.
+
+    Args:
+        hash_sha256: The SHA256 hash of the file to delete.
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        Number of records deleted.
+    """
+    if db is None:
+        db = get_db()
+    return db.delete_file_by_hash(hash_sha256)

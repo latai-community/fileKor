@@ -77,12 +77,13 @@ def get_file_status(file_path: str) -> FileStatus:
         )
 
 
-def get_directory_status(directory: str, recursive: bool = True) -> DirectoryStatus:
+def get_directory_status(directory: str, recursive: bool = True, max_depth: int = -1) -> DirectoryStatus:
     """Get status for all files in a directory.
 
     Args:
         directory: Path to the directory.
         recursive: Whether to check subdirectories.
+        max_depth: Maximum depth to search (-1 for unlimited).
 
     Returns:
         DirectoryStatus instance.
@@ -93,17 +94,30 @@ def get_directory_status(directory: str, recursive: bool = True) -> DirectorySta
     if not dir_path.is_dir():
         raise ValueError(f"Not a directory: {directory}")
 
+    def get_depth(path: Path) -> int:
+        """Calculate depth relative to dir_path."""
+        try:
+            return len(path.relative_to(dir_path).parts)
+        except ValueError:
+            return 0
+
     # Find all supported files
     pattern = "**/*" if recursive else "*"
     supported_files = []
     for ext in SUPPORTED_EXTENSIONS:
-        supported_files.extend(dir_path.glob(f"{pattern}.{ext}"))
+        files = list(dir_path.glob(f"{pattern}.{ext}"))
+        if max_depth > 0:
+            files = [f for f in files if get_depth(f) <= max_depth]
+        supported_files.extend(files)
 
     # Find all .kor files (in .filekor/ subdirectory)
     kor_files = []
     filekor_dirs = [dir_path / ".filekor"]
     if recursive:
-        filekor_dirs.extend(dir_path.glob("**/.filekor"))
+        if max_depth > 0:
+            filekor_dirs.extend([d for d in dir_path.glob("**/.filekor") if get_depth(d) <= max_depth])
+        else:
+            filekor_dirs.extend(dir_path.glob("**/.filekor"))
 
     for fk_dir in filekor_dirs:
         if fk_dir.exists() and fk_dir.is_dir():

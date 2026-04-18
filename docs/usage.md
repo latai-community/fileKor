@@ -21,6 +21,9 @@ source .venv/bin/activate
 | `labels` | Add taxonomy labels to a file |
 | `sync` | Sync .kor files to database |
 | `status` | Show status of .kor files |
+| `list` | List SHA256 hashes and file names |
+| `delete` | Delete .kor files and/or database records |
+| `merge` | Merge multiple .kor files into one |
 | `process` | Legacy - extract metadata |
 
 ---
@@ -312,6 +315,114 @@ The SQLite database includes:
 - **labels** - Associated labels with confidence scores
 - **files_fts** - Full-text search index (FTS5)
 - **schema_version** - Migration tracking
+
+---
+
+## List
+
+List SHA256 hashes and file names for all `.kor` files in a directory.
+
+```bash
+# List all .kor files in directory
+filekor list ./documentos
+
+# Output as JSON
+filekor list ./documentos --json
+
+# Output as CSV
+filekor list ./documentos --csv
+
+# Output only SHA256 hashes (useful for pipes)
+filekor list ./documentos --sha-only
+
+# Filter by file extension
+filekor list ./documentos --ext pdf
+
+# Include entries from merged.kor files
+filekor list ./documentos --include-merged
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+| `--csv` | Output as CSV |
+| `--sha-only` | Output only SHA256 hashes |
+| `--ext` | Filter by file extension (pdf, md, txt) |
+| `--include-merged` | Include entries from merged.kor files |
+
+---
+
+## Delete
+
+Delete `.kor` files and/or database records by SHA256 hash.
+
+```bash
+# Delete by SHA256 hash (from both DB and files)
+filekor delete ./documentos --sha <hash>
+
+# Delete by file path (calculates SHA internally)
+filekor delete ./documentos --path ./documento.pdf
+
+# Delete from multiple hashes in a file
+filekor delete ./documentos --input hashes.txt
+
+# Delete only from database
+filekor delete ./documentos --sha <hash> --db
+
+# Delete only .kor files (not from database)
+filekor delete ./documentos --sha <hash> --file
+
+# Dry run - show what would be deleted
+filekor delete ./documentos --sha <hash> --dry-run
+
+# Skip confirmation prompt
+filekor delete ./documentos --sha <hash> --force
+
+# Limit search depth
+filekor delete ./documentos --sha <hash> --max-depth 2
+
+# Don't search subdirectories
+filekor delete ./documentos --sha <hash> --no-recursive
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--sha` | SHA256 hash of the file to delete |
+| `--path` | Path to file (SHA256 calculated internally) |
+| `--input` | File containing SHA256 hashes (one per line) |
+| `--db` | Delete only from database |
+| `--file` | Delete only .kor files (not from database) |
+| `--all` | Delete from both database and .kor files |
+| `--dry-run` | Show what would be deleted without actually deleting |
+| `--force` | Skip confirmation prompt |
+| `--no-recursive` | Do not search in subdirectories |
+| `--max-depth` | Maximum directory depth to search |
+| `-v`, `--verbose` | Show detailed output |
+
+---
+
+## Merge
+
+Merge multiple `.kor` files into a single aggregated `.kor` file.
+
+```bash
+# Merge all .kor files in .filekor/ directory
+filekor merge ./documentos
+
+# Keep original .kor files after merge
+filekor merge ./documentos --no-erase
+
+# Specify output path
+filekor merge ./documentos -o ./output.kor
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o`, `--output` | Output file for merged .kor |
+| `--no-erase` | Keep original .kor files after merge |
 
 ---
 

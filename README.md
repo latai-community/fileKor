@@ -26,8 +26,14 @@ uv pip install -e .
 # CLI Usage
 filekor extract documento.pdf
 filekor sidecar documento.pdf
+filekor sidecar ./documentos --dir           # Process directory (generates merged.kor by default)
+filekor sidecar ./documentos --dir --no-merge # Generate individual .kor files
+filekor sidecar ./documentos --dir --db     # Use database to regenerate when available
 filekor labels documento.pdf
 filekor sync documento.kor          # Sync existing .kor to database
+filekor merge ./directorio         # Merge multiple .kor files
+filekor delete --path ./doc.pdf    # Delete by path
+filekor delete --sha <hash>        # Delete by SHA256
 ```
 
 ## Library Usage
