@@ -3,9 +3,9 @@ __version__ = "0.1.0"
 
 # Core exports
 from filekor.sidecar import Sidecar, FileInfo, FileMetadata, Content
-from filekor.labels import LabelsConfig, LLMConfig, suggest_labels
-from filekor.processor import DirectoryProcessor, process_directory, ProcessResult
-from filekor.events import EventEmitter, EventType, FilekorEvent, create_emitter
+from filekor.core.labels import LabelsConfig, LLMConfig, suggest_labels
+from filekor.core.processor import DirectoryProcessor, process_directory, ProcessResult
+from filekor.core.events import EventEmitter, EventType, FilekorEvent, create_emitter
 from filekor.db import (
     get_db,
     sync_file,
@@ -17,8 +17,25 @@ from filekor.db import (
     close_db,
     Database,
 )
-from filekor.models import DBFile, DBLabel, DBCollection
-from filekor import status
+from filekor.core.models.db_models import DBFile, DBLabel, DBCollection
+from filekor.core import status
+
+# Core module exports (new - Oct 2025 refactor)
+from filekor.core.hasher import calculate_sha256
+from filekor.core.delete import (
+    delete_by_sha,
+    delete_by_path,
+    delete_by_input,
+    get_deletion_preview,
+)
+from filekor.core.merge import merge_kor_files, load_merged_kor
+from filekor.core.list import (
+    list_kor_files,
+    list_as_text,
+    list_as_json,
+    list_as_csv,
+    list_sha_only,
+)
 
 __all__ = [
     "Sidecar",
@@ -49,4 +66,17 @@ __all__ = [
     "DBFile",
     "DBLabel",
     "DBCollection",
+    # Core module exports
+    "calculate_sha256",
+    "delete_by_sha",
+    "delete_by_path",
+    "delete_by_input",
+    "get_deletion_preview",
+    "merge_kor_files",
+    "load_merged_kor",
+    "list_kor_files",
+    "list_as_text",
+    "list_as_json",
+    "list_as_csv",
+    "list_sha_only",
 ]

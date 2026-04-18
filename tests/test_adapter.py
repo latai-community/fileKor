@@ -357,7 +357,7 @@ class TestSidecarCommand:
 class TestProcessCommand:
     """Test process command backward compatibility."""
 
-    @patch("filekor.cli.PyExifToolAdapter.is_available")
+    @patch("filekor.cli.process.PyExifToolAdapter.is_available")
     def test_process_still_works(self, mock_available, tmp_path):
         """Verify existing process command still functions."""
         from click.testing import CliRunner

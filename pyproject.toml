@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filekor"
-version = "0.1.0"
+version = "0.1.1"
 description = "PDF metadata extraction CLI using PyExifTool"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,7 +17,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyexiftool>=0.5.0",
     "pyyaml>=6.0.0",
-    "pypdf>=6.0.0",
+    "pypdf>=6.9.1",
     "google-genai>=0.3.0",
     "rich>=13.0.0",
     "openai>=1.0.0",

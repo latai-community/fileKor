@@ -1,29 +1,13 @@
-"""Parallel processing engine for directory batch operations."""
+"""Parallel processing engine for core module - directory batch operations."""
 
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, List, Optional, Dict, Any
-from dataclasses import dataclass
+from typing import Callable, List, Optional
 
+from filekor.core.models.process_result import ProcessResult, SUPPORTED_EXTENSIONS
 from filekor.adapters.exiftool import PyExifToolAdapter
 from filekor.sidecar import Sidecar, Content
 from filekor.core.labels import LabelsConfig, LLMConfig, suggest_labels
-
-
-# Supported file extensions for processing
-SUPPORTED_EXTENSIONS = {"pdf", "txt", "md"}
-
-
-@dataclass
-class ProcessResult:
-    """Result of processing a single file."""
-
-    file_path: Path
-    success: bool
-    output_path: Optional[Path] = None
-    error: Optional[str] = None
-    labels: Optional[List[str]] = None
 
 
 class DirectoryProcessor:
@@ -59,14 +43,11 @@ class DirectoryProcessor:
         Returns:
             Path for the .kor output file.
         """
-        # Include extension in filename to avoid collisions (e.g., sample.json.kor, sample.md.kor)
         ext = input_path.suffix.lstrip(".").lower()
         if self.output_dir:
-            # Ensure output directory exists
             self.output_dir.mkdir(parents=True, exist_ok=True)
             return self.output_dir / f"{input_path.stem}.{ext}.kor"
         else:
-            # Default: .filekor/ subdirectory next to the file
             filekor_dir = input_path.parent / ".filekor"
             filekor_dir.mkdir(parents=True, exist_ok=True)
             return filekor_dir / f"{input_path.stem}.{ext}.kor"
@@ -87,7 +68,7 @@ class DirectoryProcessor:
                 try:
                     metadata = self.adapter.extract_metadata(str(file_path))
                 except Exception:
-                    pass  # Continue without metadata
+                    pass
 
             # Extract text content
             content_obj = None
@@ -103,7 +84,7 @@ class DirectoryProcessor:
                     page_count=page_count,
                 )
             except Exception:
-                pass  # Continue without content
+                pass
 
             # Create sidecar
             sidecar = Sidecar.create(
@@ -123,7 +104,7 @@ class DirectoryProcessor:
                     )
                     sidecar.update_labels(labels)
                 except Exception:
-                    pass  # Continue without labels
+                    pass
 
             # Write output
             output_path = self.get_output_path(file_path)
@@ -159,18 +140,15 @@ class DirectoryProcessor:
         Returns:
             List of ProcessResult for each file.
         """
-        # Find all supported files (excluding .filekor/ directories)
         pattern = "**/*" if recursive else "*"
         files = []
         for ext in SUPPORTED_EXTENSIONS:
             files.extend(directory.glob(f"{pattern}.{ext}"))
 
-        # Filter out files in .filekor/ directories
         files = [f for f in files if ".filekor" not in f.parts]
 
         results: List[ProcessResult] = []
 
-        # Process in parallel
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             futures = {executor.submit(self.process_file, f): f for f in files}
 

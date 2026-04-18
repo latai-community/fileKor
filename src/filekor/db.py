@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from filekor.models import DBFile, DBLabel
+from filekor.core.models.db_models import DBFile, DBLabel
 
 logger = logging.getLogger(__name__)
 

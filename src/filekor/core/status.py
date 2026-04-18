@@ -1,32 +1,9 @@
-"""Status module for lib API - view .kor file information."""
+"""Status module for core - view .kor file information."""
 
 from pathlib import Path
-from typing import Dict, List, Optional
-from dataclasses import dataclass
+from typing import Dict
 
-from filekor.sidecar import Sidecar
-
-
-@dataclass
-class FileStatus:
-    """Status information for a file."""
-
-    file_path: Path
-    kor_path: Path
-    exists: bool
-    sidecar: Optional[Sidecar] = None
-    error: Optional[str] = None
-
-
-@dataclass
-class DirectoryStatus:
-    """Status information for a directory."""
-
-    directory: Path
-    total_files: int
-    kor_files: int
-    files_without_kor: List[Path]
-    file_statuses: List[FileStatus]
+from filekor.core.models.file_status import FileStatus, DirectoryStatus
 
 
 def get_file_status(file_path: str) -> FileStatus:
@@ -38,6 +15,8 @@ def get_file_status(file_path: str) -> FileStatus:
     Returns:
         FileStatus instance.
     """
+    from filekor.sidecar import Sidecar
+
     path = Path(file_path)
 
     # Check new location: .filekor/{filename}.{ext}.kor
@@ -77,7 +56,9 @@ def get_file_status(file_path: str) -> FileStatus:
         )
 
 
-def get_directory_status(directory: str, recursive: bool = True, max_depth: int = -1) -> DirectoryStatus:
+def get_directory_status(
+    directory: str, recursive: bool = True, max_depth: int = -1
+) -> DirectoryStatus:
     """Get status for all files in a directory.
 
     Args:
@@ -115,7 +96,9 @@ def get_directory_status(directory: str, recursive: bool = True, max_depth: int 
     filekor_dirs = [dir_path / ".filekor"]
     if recursive:
         if max_depth > 0:
-            filekor_dirs.extend([d for d in dir_path.glob("**/.filekor") if get_depth(d) <= max_depth])
+            filekor_dirs.extend(
+                [d for d in dir_path.glob("**/.filekor") if get_depth(d) <= max_depth]
+            )
         else:
             filekor_dirs.extend(dir_path.glob("**/.filekor"))
 
@@ -123,7 +106,7 @@ def get_directory_status(directory: str, recursive: bool = True, max_depth: int 
         if fk_dir.exists() and fk_dir.is_dir():
             kor_files.extend(fk_dir.glob("*.kor"))
 
-    # Get status for each file (checks .filekor/ automatically)
+    # Get status for each file
     file_statuses = []
     for file_path in supported_files:
         status = get_file_status(str(file_path))
