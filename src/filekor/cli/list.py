@@ -18,25 +18,11 @@ from filekor.core.list import (
 @click.command()
 @click.argument("directory", type=click.Path(exists=True))
 @click.option(
-    "--json",
-    "output_json",
-    is_flag=True,
-    default=False,
-    help="Output as JSON",
-)
-@click.option(
-    "--csv",
-    "output_csv",
-    is_flag=True,
-    default=False,
-    help="Output as CSV",
-)
-@click.option(
-    "--sha-only",
-    "sha_only",
-    is_flag=True,
-    default=False,
-    help="Output only SHA256 hashes (one per line)",
+    "--format",
+    "-f",
+    type=click.Choice(["text", "json", "csv", "sha"]),
+    default="text",
+    help="Output format",
 )
 @click.option(
     "--ext",
@@ -46,21 +32,20 @@ from filekor.core.list import (
     help="Filter by file extension (e.g., pdf, md, txt)",
 )
 @click.option(
-    "--include-merged",
-    "include_merged",
+    "--no-merged",
+    "no_merged",
     is_flag=True,
     default=False,
-    help="Include individual entries from merged.kor files",
+    help="Exclude entries from merged.kor files",
 )
 def list(
     directory: str,
-    output_json: bool,
-    output_csv: bool,
-    sha_only: bool,
+    format: str,
     extension: Optional[str],
-    include_merged: bool,
+    no_merged: bool,
 ) -> None:
     """List SHA256 hashes and file names for all .kor files in a directory."""
+    include_merged = not no_merged
     results = list_kor_files(
         directory=directory,
         extension=extension,
@@ -68,17 +53,14 @@ def list(
         recursive=True,
     )
 
-    if sha_only:
-        output = list_sha_only(directory, extension, include_merged)
-        console.print(output)
-    elif output_json:
+    if format == "json":
         output = list_as_json(directory, extension, include_merged)
-        console.print(output)
-    elif output_csv:
+    elif format == "csv":
         output = list_as_csv(directory, extension, include_merged)
-        console.print(output)
+    elif format == "sha":
+        output = list_sha_only(directory, extension, include_merged)
     else:
         output = list_as_text(directory, extension, include_merged)
-        console.print(output)
 
+    console.print(output)
     console.print(f"\n[bold]Total:[/bold] {len(results)} files")

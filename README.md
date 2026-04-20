@@ -32,6 +32,9 @@ filekor sidecar ./documentos --dir --db     # Use database to regenerate when av
 filekor labels documento.pdf
 filekor sync documento.kor          # Sync existing .kor to database
 filekor merge ./directorio         # Merge multiple .kor files
+filekor list ./directorio          # List all .kor files (includes merged by default)
+filekor list ./directorio -f json  # Output as JSON with full hashes
+filekor list ./directorio -f csv   # Output as CSV with full hashes
 filekor delete --path ./doc.pdf    # Delete by path
 filekor delete --sha <hash>        # Delete by SHA256
 ```

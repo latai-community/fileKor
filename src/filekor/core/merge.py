@@ -48,7 +48,7 @@ def merge_kor_files(
 
     merged_yaml = ""
     for sidecar in merged_sidecars:
-        merged_yaml += sidecar.to_yaml() + "\n"
+        merged_yaml += "---\n" + sidecar.to_yaml() + "\n"
 
     out_path = Path(output_path) if output_path else filekor_dir / "merged.kor"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,25 +81,13 @@ def load_merged_kor(path: str) -> List[Sidecar]:
     if not kor_path.exists():
         raise FileNotFoundError(f"Merged .kor file not found: {path}")
 
+    import yaml
+
     content = kor_path.read_text()
-    lines = content.strip().split("\n---")
-
     sidecars = []
-    for section in lines:
-        if section.strip():
-            import yaml
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".kor", delete=False
-            ) as tmp:
-                tmp.write(section)
-                tmp_path = tmp.name
-
-            try:
-                sidecar = Sidecar.load(tmp_path)
-                sidecars.append(sidecar)
-            except Exception:
-                continue
+    for data in yaml.safe_load_all(content):
+        if data:
+            sidecar = Sidecar.model_validate(data)
+            sidecars.append(sidecar)
 
     return sidecars
