@@ -26,7 +26,7 @@ def list_kor_files(
         >>> results = list_kor_files("./docs", extension="pdf")
     """
     from filekor.core.status import get_directory_status
-    from filekor.merge import load_merged_kor
+    from filekor.core.merge import load_merged_kor
 
     dir_path = Path(directory)
     results = []

@@ -351,6 +351,18 @@ filekor list ./documentos --include-merged
 | `--ext` | Filter by file extension (pdf, md, txt) |
 | `--include-merged` | Include entries from merged.kor files |
 
+**Important:** By default, `filekor list` only shows standalone `.kor` files. If your files have been merged into a `merged.kor` file (using `filekor merge`), you **must** use `--include-merged` to list the individual entries within the merged file. Otherwise, only standalone `.kor` files will be shown.
+
+**Example:**
+```bash
+# After running: filekor merge ./documentos
+# Without flag: shows 0 files (no individual .kor files exist)
+filekor list ./documentos
+
+# With flag: shows all entries from merged.kor
+filekor list ./documentos --include-merged
+```
+
 ---
 
 ## Delete
