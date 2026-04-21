@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import click
 
 from filekor.cli.base import console, extract_text
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
 from filekor.core.labels import LLMConfig
 from filekor.core.summary import generate_summary, SummaryResult
 from filekor.core.processor import SUPPORTED_EXTENSIONS
@@ -123,8 +124,8 @@ def _summary_file(
         sys.exit(2)
 
     file_ext = file_path.suffix.lstrip(".").lower()
-    filekor_dir = file_path.parent / ".filekor"
-    kor_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
+    filekor_dir = file_path.parent / FILEKOR_DIR
+    kor_path = filekor_dir / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
     existing_kor = kor_path.exists()
 
     llm_config_obj = (
@@ -225,7 +226,7 @@ def _summary_directory(
     seen = set()
     unique_files = []
     for f in files:
-        if f not in seen and ".filekor" not in f.parts:
+        if f not in seen and FILEKOR_DIR not in f.parts:
             seen.add(f)
             unique_files.append(f)
     files = unique_files
@@ -252,8 +253,8 @@ def _summary_directory(
             )
 
             file_ext = file_path.suffix.lstrip(".").lower()
-            filekor_dir = file_path.parent / ".filekor"
-            kor_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
+            filekor_dir = file_path.parent / FILEKOR_DIR
+            kor_path = filekor_dir / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
 
             if kor_path.exists():
                 sidecar = Sidecar.load(str(kor_path))
@@ -284,7 +285,9 @@ def _summary_directory(
                 successful += 1
                 file_ext = file_path.suffix.lstrip(".").lower()
                 kor_path = (
-                    file_path.parent / ".filekor" / f"{file_path.stem}.{file_ext}.kor"
+                    file_path.parent
+                    / FILEKOR_DIR
+                    / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
                 )
                 _auto_sync_hook(kor_path, llm_config_obj)
                 short_preview = (result.short[:60] + "...") if result.short else "none"

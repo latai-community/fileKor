@@ -11,10 +11,18 @@ from typing import Any, Dict, Optional, Union
 
 import yaml
 
+from filekor.constants import (
+    CONFIG_DB_KEY,
+    CONFIG_FILENAME,
+    CONFIG_LLM_KEY,
+    CONFIG_ROOT_KEY,
+    CONFIG_WORKERS_KEY,
+    FILEKOR_DIR,
+)
 from filekor.core.labels import LLMConfig
 
 
-DEFAULT_DB_PATH = Path.home() / ".filekor" / "index.db"
+DEFAULT_DB_PATH = Path.home() / FILEKOR_DIR / "index.db"
 
 
 def _expand_env_vars(value: str) -> str:
@@ -117,9 +125,9 @@ class FilekorConfig:
             search_paths = [Path(custom_path)]
         else:
             search_paths = [
-                Path("config.yaml"),
-                Path(".filekor/config.yaml"),
-                Path.home() / ".filekor" / "config.yaml",
+                Path(CONFIG_FILENAME),
+                Path(FILEKOR_DIR) / CONFIG_FILENAME,
+                Path.home() / FILEKOR_DIR / CONFIG_FILENAME,
             ]
 
         for search_path in search_paths:
@@ -128,8 +136,8 @@ class FilekorConfig:
                     content = search_path.read_text(encoding="utf-8")
                     data = yaml.safe_load(content)
 
-                    if data and "filekor" in data:
-                        filekor_data = data["filekor"]
+                    if data and CONFIG_ROOT_KEY in data:
+                        filekor_data = data[CONFIG_ROOT_KEY]
                         return cls._from_dict(filekor_data)
                 except Exception:
                     pass
@@ -148,16 +156,16 @@ class FilekorConfig:
             FilekorConfig instance.
         """
         # DB path
-        db_data = data.get("db", {})
+        db_data = data.get(CONFIG_DB_KEY, {})
         db_path = db_data.get("path")
         if db_path:
             db_path = Path(db_path).expanduser().resolve()
 
         # Workers
-        workers = data.get("workers", 4)
+        workers = data.get(CONFIG_WORKERS_KEY, 4)
 
         # LLM (pass raw dict, let __init__ handle env vars)
-        llm_data = data.get("llm", {})
+        llm_data = data.get(CONFIG_LLM_KEY, {})
 
         return cls(
             db_path=db_path,

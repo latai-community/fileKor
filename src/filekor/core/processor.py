@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
 from filekor.core.models.process_result import ProcessResult, SUPPORTED_EXTENSIONS
 from filekor.adapters.exiftool import PyExifToolAdapter
 from filekor.sidecar import Sidecar, Content
@@ -46,11 +47,11 @@ class DirectoryProcessor:
         ext = input_path.suffix.lstrip(".").lower()
         if self.output_dir:
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            return self.output_dir / f"{input_path.stem}.{ext}.kor"
+            return self.output_dir / f"{input_path.stem}.{ext}{KOR_EXTENSION}"
         else:
-            filekor_dir = input_path.parent / ".filekor"
+            filekor_dir = input_path.parent / FILEKOR_DIR
             filekor_dir.mkdir(parents=True, exist_ok=True)
-            return filekor_dir / f"{input_path.stem}.{ext}.kor"
+            return filekor_dir / f"{input_path.stem}.{ext}{KOR_EXTENSION}"
 
     def process_file(self, file_path: Path) -> ProcessResult:
         """Process a single file.
@@ -145,7 +146,7 @@ class DirectoryProcessor:
         for ext in SUPPORTED_EXTENSIONS:
             files.extend(directory.glob(f"{pattern}.{ext}"))
 
-        files = [f for f in files if ".filekor" not in f.parts]
+        files = [f for f in files if FILEKOR_DIR not in f.parts]
 
         results: List[ProcessResult] = []
 

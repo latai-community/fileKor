@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Optional
 
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION, MERGED_KOR_FILENAME
 from filekor.sidecar import Sidecar
 
 
@@ -26,12 +27,12 @@ def merge_kor_files(
         >>> sidecars = merge_kor_files("./docs", delete_sources=False)
     """
     dir_path = Path(directory)
-    filekor_dir = dir_path / ".filekor"
+    filekor_dir = dir_path / FILEKOR_DIR
 
     if not filekor_dir.is_dir():
-        raise FileNotFoundError(f".filekor directory not found: {filekor_dir}")
+        raise FileNotFoundError(f"{FILEKOR_DIR} directory not found: {filekor_dir}")
 
-    kor_files = list(filekor_dir.glob("*.kor"))
+    kor_files = list(filekor_dir.glob(f"*{KOR_EXTENSION}"))
     if not kor_files:
         return []
 
@@ -50,7 +51,7 @@ def merge_kor_files(
     for sidecar in merged_sidecars:
         merged_yaml += "---\n" + sidecar.to_yaml() + "\n"
 
-    out_path = Path(output_path) if output_path else filekor_dir / "merged.kor"
+    out_path = Path(output_path) if output_path else filekor_dir / MERGED_KOR_FILENAME
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(merged_yaml)
 
@@ -79,7 +80,7 @@ def load_merged_kor(path: str) -> List[Sidecar]:
     """
     kor_path = Path(path)
     if not kor_path.exists():
-        raise FileNotFoundError(f"Merged .kor file not found: {path}")
+        raise FileNotFoundError(f"Merged {KOR_EXTENSION} file not found: {path}")
 
     import yaml
 

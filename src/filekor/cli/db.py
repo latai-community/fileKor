@@ -9,6 +9,12 @@ import click
 from rich.table import Table
 
 from filekor.cli.base import console
+from filekor.constants import (
+    CONFIG_DB_KEY,
+    CONFIG_FILENAME,
+    CONFIG_ROOT_KEY,
+    FILEKOR_DIR,
+)
 from filekor.core.config import FilekorConfig
 
 
@@ -288,17 +294,17 @@ def _has_db_config() -> bool:
     import yaml
 
     search_paths = [
-        Path("config.yaml"),
-        Path(".filekor/config.yaml"),
-        Path.home() / ".filekor" / "config.yaml",
+        Path(CONFIG_FILENAME),
+        Path(FILEKOR_DIR) / CONFIG_FILENAME,
+        Path.home() / FILEKOR_DIR / CONFIG_FILENAME,
     ]
 
     for search_path in search_paths:
         if search_path.exists():
             try:
                 data = yaml.safe_load(search_path.read_text(encoding="utf-8"))
-                if data and "filekor" in data:
-                    db = data["filekor"].get("db", {})
+                if data and CONFIG_ROOT_KEY in data:
+                    db = data[CONFIG_ROOT_KEY].get(CONFIG_DB_KEY, {})
                     if "path" in db:
                         return True
             except Exception:

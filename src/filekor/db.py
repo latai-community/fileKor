@@ -19,12 +19,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from filekor.constants import FILEKOR_DIR
 from filekor.core.models.db_models import DBFile, DBLabel
 
 logger = logging.getLogger(__name__)
 
 # Default database path
-DB_PATH = Path.home() / ".filekor" / "index.db"
+DB_PATH = Path.home() / FILEKOR_DIR / "index.db"
 
 # Schema version for migrations
 SCHEMA_VERSION = 2

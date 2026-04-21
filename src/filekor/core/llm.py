@@ -5,6 +5,15 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from filekor.constants import (
+    PROVIDER_GEMINI,
+    PROVIDER_GOOGLE,
+    PROVIDER_GROQ,
+    PROVIDER_MOCK,
+    PROVIDER_OPENAI,
+    PROVIDER_OPENROUTER,
+)
+
 
 class LLMProvider(ABC):
     """Abstract interface for LLM providers."""
@@ -385,7 +394,7 @@ class MockProvider(LLMProvider):
 
 
 def get_provider(
-    provider_name: str = "gemini",
+    provider_name: str = PROVIDER_GEMINI,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
 ) -> LLMProvider:
@@ -399,17 +408,17 @@ def get_provider(
     Returns:
         LLMProvider instance.
     """
-    if provider_name == "gemini" or provider_name == "google":
+    if provider_name == PROVIDER_GEMINI or provider_name == PROVIDER_GOOGLE:
         return GoogleProvider(api_key=api_key, model=model or "gemini-2.0-flash")
-    elif provider_name == "groq":
+    elif provider_name == PROVIDER_GROQ:
         return GroqProvider(api_key=api_key, model=model or "llama-3.1-8b-instant")
-    elif provider_name == "openai":
+    elif provider_name == PROVIDER_OPENAI:
         return OpenAIProvider(api_key=api_key, model=model or "gpt-4o-mini")
-    elif provider_name == "openrouter":
+    elif provider_name == PROVIDER_OPENROUTER:
         return OpenRouterProvider(
             api_key=api_key, model=model or "deepseek/deepseek-chat-v3-0324:free"
         )
-    elif provider_name == "mock":
+    elif provider_name == PROVIDER_MOCK:
         return MockProvider()
     else:
         raise ValueError(f"Unknown provider: {provider_name}")

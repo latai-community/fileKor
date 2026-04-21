@@ -8,6 +8,7 @@ import click
 
 from filekor.cli.base import console, extract_text
 from filekor.adapters.exiftool import PyExifToolAdapter
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION, MERGED_KOR_FILENAME
 from filekor.core.hasher import calculate_sha256
 from filekor.core.labels import LabelsConfig, LLMConfig
 from filekor.core.processor import DirectoryProcessor, SUPPORTED_EXTENSIONS
@@ -182,9 +183,9 @@ def _sidecar_file(
     if output:
         sidecar_path = Path(output)
     else:
-        filekor_dir = file_path.parent / ".filekor"
+        filekor_dir = file_path.parent / FILEKOR_DIR
         filekor_dir.mkdir(parents=True, exist_ok=True)
-        sidecar_path = filekor_dir / f"{file_path.stem}.{file_ext}.kor"
+        sidecar_path = filekor_dir / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
 
     if sidecar_path.exists() and not no_cache:
         click.echo(f"Info: Sidecar already exists: {sidecar_path}", err=True)
@@ -246,9 +247,9 @@ def _sidecar_file(
     output_to_sync = None
 
     if do_merge:
-        filekor_dir = file_path.parent / ".filekor"
+        filekor_dir = file_path.parent / FILEKOR_DIR
         filekor_dir.mkdir(parents=True, exist_ok=True)
-        merged_path = filekor_dir / "merged.kor"
+        merged_path = filekor_dir / MERGED_KOR_FILENAME
         merged_path.write_text(sidecar.to_yaml())
         console.print(f"[bold green]Created:[/bold green] {merged_path}")
         output_to_sync = merged_path
@@ -308,7 +309,7 @@ def _sidecar_directory(
     seen = set()
     unique_files = []
     for f in files:
-        if f not in seen and ".filekor" not in f.parts:
+        if f not in seen and FILEKOR_DIR not in f.parts:
             seen.add(f)
             unique_files.append(f)
     files = unique_files
@@ -387,9 +388,9 @@ def _sidecar_directory(
                 pass
 
     if do_merge and processed_sidecars:
-        filekor_dir = dir_path / ".filekor"
+        filekor_dir = dir_path / FILEKOR_DIR
         filekor_dir.mkdir(parents=True, exist_ok=True)
-        merged_path = filekor_dir / "merged.kor"
+        merged_path = filekor_dir / MERGED_KOR_FILENAME
 
         merged_yaml = ""
         for _, sidecar in processed_sidecars:

@@ -5,6 +5,15 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from filekor.constants import (
+    CONFIG_FILENAME,
+    CONFIG_LLM_KEY,
+    CONFIG_ROOT_KEY,
+    CONFIG_WORKERS_KEY,
+    FILEKOR_DIR,
+    LABELS_PROPERTIES_FILENAME,
+    PROVIDER_GEMINI,
+)
 from filekor.core.llm import LLMProvider, get_provider
 
 # Default labels when no config file is found
@@ -77,9 +86,9 @@ class LabelsConfig:
 
         # Search order: current dir -> .filekor/ -> ~/.filekor/ -> defaults
         search_paths = [
-            Path("labels.properties"),
-            Path(".filekor/labels.properties"),
-            Path.home() / ".filekor" / "labels.properties",
+            Path(LABELS_PROPERTIES_FILENAME),
+            Path(FILEKOR_DIR) / LABELS_PROPERTIES_FILENAME,
+            Path.home() / FILEKOR_DIR / LABELS_PROPERTIES_FILENAME,
         ]
 
         for search_path in search_paths:
@@ -176,7 +185,7 @@ def reload_config(custom_path: Optional[str] = None) -> LabelsConfig:
 # LLM Config - loaded from config.yaml
 DEFAULT_LLM_CONFIG = {
     "enabled": False,
-    "provider": "gemini",
+    "provider": PROVIDER_GEMINI,
     "model": "gemini-2.0-flash",
     "max_content_chars": 1500,
     "workers": 4,
@@ -218,7 +227,7 @@ class LLMConfig:
     def __init__(
         self,
         enabled: bool = False,
-        provider: str = "gemini",
+        provider: str = PROVIDER_GEMINI,
         model: str = "gemini-2.0-flash",
         api_key: Optional[str] = None,
         max_content_chars: int = 1500,
@@ -266,9 +275,9 @@ class LLMConfig:
             search_paths = [Path(custom_path)]
         else:
             search_paths = [
-                Path("config.yaml"),
-                Path(".filekor/config.yaml"),
-                Path.home() / ".filekor" / "config.yaml",
+                Path(CONFIG_FILENAME),
+                Path(FILEKOR_DIR) / CONFIG_FILENAME,
+                Path.home() / FILEKOR_DIR / CONFIG_FILENAME,
             ]
 
         for search_path in search_paths:
@@ -277,9 +286,9 @@ class LLMConfig:
                     content = search_path.read_text(encoding="utf-8")
                     data = yaml.safe_load(content)
 
-                    if data and "filekor" in data:
-                        filekor_config = data["filekor"]
-                        llm_config = filekor_config.get("llm", {})
+                    if data and CONFIG_ROOT_KEY in data:
+                        filekor_config = data[CONFIG_ROOT_KEY]
+                        llm_config = filekor_config.get(CONFIG_LLM_KEY, {})
 
                         # Expand environment variables
                         api_key = llm_config.get("api_key")
@@ -287,11 +296,11 @@ class LLMConfig:
                             api_key = _expand_env_vars(api_key)
 
                         # Get workers count from filekor config (not under llm)
-                        workers = filekor_config.get("workers", 4)
+                        workers = filekor_config.get(CONFIG_WORKERS_KEY, 4)
 
                         return cls(
                             enabled=llm_config.get("enabled", False),
-                            provider=llm_config.get("provider", "gemini"),
+                            provider=llm_config.get("provider", PROVIDER_GEMINI),
                             model=llm_config.get("model", "gemini-2.0-flash"),
                             api_key=api_key,
                             max_content_chars=llm_config.get("max_content_chars", 1500),

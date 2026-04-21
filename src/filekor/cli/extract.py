@@ -7,6 +7,7 @@ from typing import Optional
 import click
 
 from filekor.cli.base import console, extract_text, HAS_PYPDF
+from filekor.constants import FILEKOR_DIR
 from filekor.core.labels import LabelsConfig, LLMConfig
 from filekor.core.processor import DirectoryProcessor, SUPPORTED_EXTENSIONS
 from filekor.core.events import create_emitter
@@ -85,7 +86,7 @@ def _extract_directory(directory: str, output: Optional[str]) -> None:
     seen = set()
     unique_files = []
     for f in files:
-        if f not in seen and ".filekor" not in f.parts:
+        if f not in seen and FILEKOR_DIR not in f.parts:
             seen.add(f)
             unique_files.append(f)
     files = unique_files

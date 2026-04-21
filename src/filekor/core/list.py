@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
+
 
 def list_kor_files(
     directory: str,
@@ -32,19 +34,21 @@ def list_kor_files(
     results = []
 
     if include_merged:
-        filekor_dir = dir_path / ".filekor"
+        filekor_dir = dir_path / FILEKOR_DIR
         if filekor_dir.is_dir():
-            merged_files = list(filekor_dir.glob("merged*.kor"))
+            merged_files = list(filekor_dir.glob(f"merged*{KOR_EXTENSION}"))
             for merged_file in merged_files:
                 try:
                     sidecar_list = load_merged_kor(str(merged_file))
                     for sc in sidecar_list:
-                        results.append({
-                            "sha256": sc.file.hash_sha256,
-                            "name": sc.file.name,
-                            "path": str(merged_file),
-                            "type": "merged",
-                        })
+                        results.append(
+                            {
+                                "sha256": sc.file.hash_sha256,
+                                "name": sc.file.name,
+                                "path": str(merged_file),
+                                "type": "merged",
+                            }
+                        )
                 except Exception:
                     pass
 
@@ -58,12 +62,14 @@ def list_kor_files(
         if extension and file_ext.lower() != extension.lower():
             continue
 
-        results.append({
-            "sha256": file_status.sidecar.file.hash_sha256,
-            "name": file_status.sidecar.file.name,
-            "path": str(file_status.kor_path),
-            "type": "individual",
-        })
+        results.append(
+            {
+                "sha256": file_status.sidecar.file.hash_sha256,
+                "name": file_status.sidecar.file.name,
+                "path": str(file_status.kor_path),
+                "type": "individual",
+            }
+        )
 
     return results
 
@@ -102,6 +108,7 @@ def list_as_json(
         JSON string.
     """
     import json
+
     results = list_kor_files(directory, extension, include_merged, recursive)
     return json.dumps(results, indent=2)
 

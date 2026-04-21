@@ -7,6 +7,7 @@ from typing import Optional
 import click
 
 from filekor.cli.base import console
+from filekor.constants import FILEKOR_DIR, MERGED_KOR_FILENAME
 from filekor.core.merge import merge_kor_files
 
 
@@ -48,7 +49,9 @@ def merge(directory: str, output: Optional[str], no_erase: bool) -> None:
         console.print("[yellow]No .kor files found to merge[/yellow]")
         sys.exit(0)
 
-    output_path = Path(output) if output else Path(directory) / ".filekor" / "merged.kor"
+    output_path = (
+        Path(output) if output else Path(directory) / FILEKOR_DIR / MERGED_KOR_FILENAME
+    )
     console.print(
         f"[bold green]Merged:[/bold green] {len(merged_sidecars)} files -> {output_path}"
     )

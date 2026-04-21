@@ -1,6 +1,6 @@
 filekor:
   db:
-    path: ~/.filekor/index.db    # configurable
+    path: ~/.filekor/index.db
   llm:
     enabled: true
     provider: PROVIDER_NAME_HERE

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Dict
 
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
 from filekor.core.models.file_status import FileStatus, DirectoryStatus
 
 
@@ -21,8 +22,8 @@ def get_file_status(file_path: str) -> FileStatus:
 
     # Check new location: .filekor/{filename}.{ext}.kor
     ext = path.suffix.lstrip(".").lower()
-    filekor_dir = path.parent / ".filekor"
-    kor_path = filekor_dir / f"{path.stem}.{ext}.kor"
+    filekor_dir = path.parent / FILEKOR_DIR
+    kor_path = filekor_dir / f"{path.stem}.{ext}{KOR_EXTENSION}"
 
     if not path.exists():
         return FileStatus(
@@ -93,18 +94,22 @@ def get_directory_status(
 
     # Find all .kor files (in .filekor/ subdirectory)
     kor_files = []
-    filekor_dirs = [dir_path / ".filekor"]
+    filekor_dirs = [dir_path / FILEKOR_DIR]
     if recursive:
         if max_depth > 0:
             filekor_dirs.extend(
-                [d for d in dir_path.glob("**/.filekor") if get_depth(d) <= max_depth]
+                [
+                    d
+                    for d in dir_path.glob(f"**/{FILEKOR_DIR}")
+                    if get_depth(d) <= max_depth
+                ]
             )
         else:
-            filekor_dirs.extend(dir_path.glob("**/.filekor"))
+            filekor_dirs.extend(dir_path.glob(f"**/{FILEKOR_DIR}"))
 
     for fk_dir in filekor_dirs:
         if fk_dir.exists() and fk_dir.is_dir():
-            kor_files.extend(fk_dir.glob("*.kor"))
+            kor_files.extend(fk_dir.glob(f"*{KOR_EXTENSION}"))
 
     # Get status for each file
     file_statuses = []

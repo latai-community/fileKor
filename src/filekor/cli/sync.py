@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from filekor.cli.base import console
+from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
 from filekor.db import sync_file
 
 
@@ -46,9 +47,9 @@ def sync(path: str, directory: bool, verbose: bool) -> None:
         kor_files = list(dir_path.glob("**/*.kor"))
 
         # Filter out .filekor dirs unless the target IS a .filekor dir
-        is_filekor_dir = ".filekor" in dir_path.parts
+        is_filekor_dir = FILEKOR_DIR in dir_path.parts
         if not is_filekor_dir:
-            kor_files = [f for f in kor_files if ".filekor" not in f.parts]
+            kor_files = [f for f in kor_files if FILEKOR_DIR not in f.parts]
 
         if not kor_files:
             console.print(f"[yellow]No .kor files found in {path}[/yellow]")
@@ -75,7 +76,7 @@ def sync(path: str, directory: bool, verbose: bool) -> None:
         sys.exit(0 if failed == 0 else 1)
     else:
         kor_path = Path(path)
-        if not kor_path.suffix == ".kor":
+        if not kor_path.suffix == KOR_EXTENSION:
             console.print("[red]Error: File must have .kor extension[/red]")
             sys.exit(1)
 

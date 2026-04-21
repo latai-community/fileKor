@@ -4,6 +4,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+from filekor.constants import CONFIG_FILENAME
 from filekor.core.llm import get_provider
 from filekor.core.labels import LLMConfig
 
@@ -54,7 +55,7 @@ def generate_summary(
 
     if not llm_config.enabled or not llm_config.api_key:
         raise RuntimeError(
-            "LLM is not configured. Please enable LLM in config.yaml "
+            f"LLM is not configured. Please enable LLM in {CONFIG_FILENAME} "
             "with a valid API key."
         )
 
