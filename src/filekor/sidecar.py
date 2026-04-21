@@ -169,7 +169,7 @@ class Sidecar(BaseModel):
             Labels are NOT auto-generated. Use 'filekor labels' command to add labels.
         """
 
-        path = Path(file_path)
+        path = Path(file_path).resolve()
 
         file_info = FileInfo(
             path=str(path),
@@ -244,6 +244,10 @@ class Sidecar(BaseModel):
         content_data = data.get("content")
         labels_data = data.get("labels")
         summary_data = data.get("summary")
+
+        # Normalize file path to absolute
+        if "path" in file_data:
+            file_data["path"] = str(Path(file_data["path"]).resolve())
 
         file_info = FileInfo(**file_data)
 
