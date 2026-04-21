@@ -1,7 +1,5 @@
 # AGENTS.md — fileKor
 
-## What this is
-
 Python 3.11+ CLI/library for extracting metadata from files (PDF, TXT, MD), generating `.kor` YAML sidecars, classifying with an LLM taxonomy, and indexing into SQLite with FTS5 search.
 
 ## Dev commands
@@ -10,37 +8,45 @@ Python 3.11+ CLI/library for extracting metadata from files (PDF, TXT, MD), gene
 # Setup (uses uv, NOT pip/poetry)
 uv venv && .venv\Scripts\activate   # Windows
 uv pip install -e .                 # install in dev mode
-uv pip install -e ".[dev]"          # if dev extras exist
 
 # Tests
-pytest tests/                       # all tests
-pytest tests/test_labels.py -v      # single file
-pytest tests/ --cov                 # with coverage
+pytest tests/                       # all tests (355 tests, ~15s)
+pytest tests/test_<file>.py -v      # single file
+pytest tests/ --cov                 # coverage report
 
-# Lint/format (ruff is available, no formatter script found)
+# Lint/format
 ruff check src/ tests/
 ruff format src/ tests/
 ```
-
-No lint/typecheck/formatter scripts defined in `pyproject.toml` — run ruff directly.
 
 ## Architecture
 
 ```
 src/filekor/
-├── cli/           # Click commands — each file is one command (extract.py, sidecar.py, etc.)
+├── cli/           # Click commands — each file is one command
 │   └── __init__.py  registers all commands on the cli group
-├── core/          # Business logic (config, labels, processor, merge, list, delete, summary)
-│   └── models/    # Pydantic data models (db_models, file_status, process_result)
-├── adapters/      # Metadata extraction — base.py defines MetadataAdapter ABC, exiftool.py implements it
-├── db.py          # SQLite singleton (Database class), FTS5 search, schema migrations
-├── llm.py         # LLM provider abstraction (Google, OpenAI, Groq, OpenRouter, Mock)
-├── labels.py      # Taxonomy loading from labels.properties, synonym matching
-├── sidecar.py     # Sidecar/FileMetadata/FileInfo/Content Pydantic models, YAML serialization
-└── processor.py   # Directory processing orchestration
+├── core/          # Business logic
+│   ├── config.py
+│   ├── delete.py
+│   ├── events.py
+│   ├── hasher.py
+│   ├── labels.py       # taxonomy + LLMConfig
+│   ├── list.py
+│   ├── llm.py          # providers (Google, OpenAI, Groq, OpenRouter, Mock)
+│   ├── merge.py
+│   ├── models/         # Pydantic models (db_models, file_status, process_result)
+│   ├── processor.py
+│   ├── status.py
+│   └── summary.py
+├── constants.py   # ALL magic strings centralized here
+├── db.py          # SQLite singleton (Database class), FTS5 search
+├── sidecar.py     # Sidecar/FileMetadata/FileInfo/Content models
+└── adapters/      # Metadata extraction — exiftool.py
 ```
 
-Entry point: `filekor.cli:cli` (Click group). Also runnable via `python -m filekor`.
+**Entry point:** `filekor.cli:cli` (Click group). Also runnable via `python -m filekor`.
+
+**Legacy root modules were removed** (2025 refactor). The real implementations live in `core/`. Do not recreate `events.py`, `processor.py`, `status.py`, `labels.py`, or `llm.py` at the root level.
 
 ## Config
 
@@ -62,13 +68,35 @@ Entry point: `filekor.cli:cli` (Click group). Also runnable via `python -m filek
 - Single file → `merged.kor` by default. Use `--no-merge` for individual `.kor` files.
 - YAML format with fields: version, file, metadata, content, summary, labels, parser_status, generated_at.
 
-## Testing quirks
+## Magic strings
 
-- Tests mock `filekor.cli.HAS_PYPDF` to `False` when testing CLI commands that would otherwise need pypdf installed.
-- Database tests must reset `Database._instance = None` before and after — it's a singleton.
-- Sidecar CLI tests need a `config.yaml` with `provider: mock` in a temp directory.
+**All magic strings live in `src/filekor/constants.py`**. When adding new literals that appear in multiple places (file extensions, config keys, DB column names, etc.), define them there and import. See the file for existing constants.
+
+## Testing — critical rules
+
+### Mocking
+- **`patch()` must target where the function is USED, not where it is defined.**
+  - `summary.py` does `from filekor.cli.base import extract_text` — patch `filekor.cli.summary.extract_text` (not `filekor.cli.base.extract_text`).
+  - Same rule applies to `generate_summary`, `create_emitter`, etc.
+- LLM provider tests mock the actual client (e.g. `google.genai.Client`) — never make real API calls.
+
+### Database singleton
+- There is a **double singleton**: `Database._instance` AND `filekor.db._db_instance`.
+- Tests must reset **both** in `setUp`/`tearDown`:
+  ```python
+  import filekor.db as _db_module
+  Database._instance = None
+  _db_module._db_instance = None
+  ```
+
+### CLI testing
+- Use `CliRunner` from `click.testing`.
+- `CliRunner` strips Rich formatting tags (`[green]`, `[red]`) from output — do not assert on them.
 - `auto_sync` hook in `cli/sidecar.py` swallows exceptions intentionally — don't treat silent failures as bugs in tests.
-- LLM provider tests mock the actual client (e.g. `google.genai.Client`) — never make real API calls in tests.
+
+### Other quirks
+- Tests mock `filekor.cli.HAS_PYPDF` to `False` when testing CLI commands that would otherwise need pypdf installed.
+- Sidecar CLI tests need a `config.yaml` with `provider: mock` in a temp directory.
 
 ## Key imports
 
@@ -76,7 +104,7 @@ Entry point: `filekor.cli:cli` (Click group). Also runnable via `python -m filek
 # Library API
 from filekor.db import get_db, sync_file, search_files
 from filekor.sidecar import Sidecar, FileInfo, FileMetadata, Content
-from filekor.labels import LabelsConfig, LLMConfig, suggest_labels
+from filekor.core.labels import LabelsConfig, LLMConfig, suggest_labels
 
 # Core logic
 from filekor.core.config import FilekorConfig
