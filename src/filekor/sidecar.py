@@ -243,6 +243,7 @@ class Sidecar(BaseModel):
         metadata_data = data.get("metadata")
         content_data = data.get("content")
         labels_data = data.get("labels")
+        summary_data = data.get("summary")
 
         file_info = FileInfo(**file_data)
 
@@ -258,11 +259,16 @@ class Sidecar(BaseModel):
         if labels_data:
             labels_obj = FileLabels(**labels_data)
 
+        summary_obj = None
+        if summary_data:
+            summary_obj = FileSummary(**summary_data)
+
         return cls(
             version=data.get("version", "1.0"),
             file=file_info,
             metadata=extracted_meta,
             content=content_obj,
+            summary=summary_obj,
             labels=labels_obj,
             parser_status=data.get("parser_status", "OK"),
             generated_at=data.get("generated_at"),

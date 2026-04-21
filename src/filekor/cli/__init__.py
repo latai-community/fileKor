@@ -3,13 +3,14 @@
 import click
 
 from filekor.cli.base import console, extract_text, HAS_PYPDF
+from filekor.cli.db import db
 from filekor.cli.delete import delete
 from filekor.cli.extract import extract
 from filekor.cli.labels import labels
 from filekor.cli.list import list
 from filekor.cli.merge import merge
-from filekor.cli.process import process
 from filekor.cli.sidecar import sidecar
+from filekor.cli.summary import summary
 from filekor.cli.sync import sync
 from filekor.cli.status import status
 
@@ -22,9 +23,10 @@ def cli() -> None:
 
 # Register commands
 cli.add_command(extract)
-cli.add_command(process)
+cli.add_command(db)
 cli.add_command(sidecar)
 cli.add_command(labels)
+cli.add_command(summary)
 cli.add_command(status)
 cli.add_command(sync)
 cli.add_command(merge)
@@ -37,13 +39,14 @@ __all__ = [
     "extract_text",
     "HAS_PYPDF",
     "cli",
+    "db",
     "delete",
     "extract",
     "labels",
     "list",
     "merge",
-    "process",
     "sidecar",
+    "summary",
     "sync",
     "status",
 ]
