@@ -7,7 +7,7 @@ type safety and validation when working with the SQLite backend.
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 
 class DBFile(BaseModel):
@@ -43,10 +43,11 @@ class DBFile(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        """Pydantic config."""
+    model_config = ConfigDict()
 
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("modified_at", "created_at", "updated_at", when_used="always")
+    def _serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+        return dt.isoformat() if dt else None
 
 
 class DBLabel(BaseModel):
@@ -68,10 +69,11 @@ class DBLabel(BaseModel):
     source: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        """Pydantic config."""
+    model_config = ConfigDict()
 
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("created_at", when_used="always")
+    def _serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+        return dt.isoformat() if dt else None
 
 
 class DBCollection(BaseModel):
@@ -94,7 +96,8 @@ class DBCollection(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        """Pydantic config."""
+    model_config = ConfigDict()
 
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+    @field_serializer("created_at", "updated_at", when_used="always")
+    def _serialize_datetime(self, dt: Optional[datetime], _info) -> Optional[str]:
+        return dt.isoformat() if dt else None

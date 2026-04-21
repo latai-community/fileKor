@@ -26,6 +26,7 @@ from filekor.db import (
     close_db,
     DB_PATH,
 )
+import filekor.db as _db_module
 from filekor.models import DBFile, DBLabel
 from filekor.sidecar import Sidecar
 
@@ -405,6 +406,7 @@ class TestConvenienceFunctions:
         """Verify query_by_label() convenience function works."""
         # Reset singleton
         Database._instance = None
+        _db_module._db_instance = None
 
         db_path = tmp_path / "test.db"
 
@@ -427,6 +429,7 @@ class TestConvenienceFunctions:
         finally:
             close_db()
             Database._instance = None
+            _db_module._db_instance = None
 
 
 class TestDatabaseLifecycle:
@@ -487,7 +490,7 @@ class TestCLISyncIntegration:
 
         # Reset singleton
         Database._instance = None
-        _db_instance = None  # Also reset module-level instance
+        _db_module._db_instance = None
 
         try:
             # Create test file and sidecar with unique name
@@ -515,6 +518,7 @@ class TestCLISyncIntegration:
         finally:
             close_db()
             Database._instance = None
+            _db_module._db_instance = None
 
     def test_auto_sync_disabled_skips_db(self, tmp_path):
         """Verify CLI skips DB sync when auto_sync is disabled."""

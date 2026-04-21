@@ -29,3 +29,10 @@ filekor = "filekor.cli:cli"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["filekor*"]
+
+[dependency-groups]
+dev = [
+    "pdbpp>=0.12.1",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+]

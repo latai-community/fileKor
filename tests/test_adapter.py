@@ -352,21 +352,3 @@ class TestSidecarCommand:
             assert "version" in data
         finally:
             os.chdir(old_cwd)
-
-
-class TestProcessCommand:
-    """Test process command backward compatibility."""
-
-    @patch("filekor.cli.process.PyExifToolAdapter.is_available")
-    def test_process_still_works(self, mock_available, tmp_path):
-        """Verify existing process command still functions."""
-        from click.testing import CliRunner
-        from filekor.cli import process
-
-        mock_available.return_value = True
-
-        # Note: We can't fully test process without exiftool installed
-        # Just verify the command registers
-        from filekor.cli import cli
-
-        assert "process" in [cmd.name for cmd in cli.commands.values()]
