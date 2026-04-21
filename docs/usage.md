@@ -12,6 +12,27 @@ source .venv/bin/activate
 
 ---
 
+## Contents
+
+| Section | Description |
+|---------|-------------|
+| [Commands](#commands) | Overview of all available commands |
+| [Extract](#extract) | Extract text content from files |
+| [Sidecar](#sidecar) | Generate .kor sidecar files with metadata |
+| [Labels](#labels) | Add taxonomy labels using LLM |
+| [Summary](#summary) | Generate summaries using LLM |
+| [Status](#status) | Show status of .kor files |
+| [List](#list) | List .kor files with format options |
+| [Merge](#merge) | Merge multiple .kor files into one |
+| [Delete](#delete) | Delete .kor files and database records |
+| [Sync](#sync) | Sync .kor files to database |
+| [Database](database.md) | SQLite database configuration and queries |
+| [Exit Codes](#exit-codes) | CLI exit code reference |
+| [Examples](#examples) | Usage examples and workflows |
+| [Library API](#library-api) | Python library reference |
+
+---
+
 ## Commands
 
 | Command | Description |
@@ -19,12 +40,13 @@ source .venv/bin/activate
 | `extract` | Extract text content from supported files |
 | `sidecar` | Generate .kor sidecar file with metadata |
 | `labels` | Add taxonomy labels to a file |
+| `summary` | Generate summaries using LLM |
+| `db` | Show database configuration and statistics |
 | `sync` | Sync .kor files to database |
 | `status` | Show status of .kor files |
 | `list` | List SHA256 hashes and file names |
 | `delete` | Delete .kor files and/or database records |
 | `merge` | Merge multiple .kor files into one |
-| `process` | Legacy - extract metadata |
 
 ---
 
@@ -139,6 +161,52 @@ Saved: documento.kor
 
 ---
 
+## Summary
+
+Generate summaries for files using LLM. Creates or updates `.kor` file.
+
+```bash
+# Generate both short and long summaries (default)
+filekor summary <path>
+
+# Generate short summary only
+filekor summary <path> --short
+
+# Generate long summary only
+filekor summary <path> --long
+
+# Override max characters sent to LLM
+filekor summary <path> --max-chars 3000
+
+# With custom config.yaml for LLM
+filekor summary <path> --llm-config <config.yaml>
+
+# Process directory recursively
+filekor summary ./documentos/ --dir
+
+# Watch mode for real-time progress
+filekor summary ./documentos/ --dir --watch
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--short` | Generate short summary only |
+| `--long` | Generate long summary only |
+| `--max-chars` | Max characters to send to LLM (overrides config) |
+| `--llm-config` | Custom config.yaml path |
+| `-d`, `--dir` | Process directory instead of single file |
+| `--workers` | Number of parallel workers (from config.yaml) |
+| `--watch` | Enable event emitter for real-time progress |
+
+**Behavior:**
+- If `.kor` exists: loads it and updates summary (overwrites existing)
+- If `.kor` does NOT exist: creates new `.kor` with file info and summary
+- By default generates **both** short and long summaries
+- LLM is required (will fail if not configured)
+
+---
+
 ## Status
 
 Show status of .kor files for a file or directory.
@@ -158,22 +226,6 @@ filekor status ./documentos/ --dir --watch
 |--------|-------------|
 | `-d`, `--dir` | Show status for directory instead of single file |
 | `--watch` | Enable watch mode for real-time updates |
-
----
-
-## Process (Legacy)
-
-Legacy command for metadata extraction.
-
-```bash
-filekor process <path>
-filekor process <path> --output <output>
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-o`, `--output` | Output file path |
 
 ---
 
@@ -244,40 +296,15 @@ filekor status ./documentos/ --dir
 
 filekor includes a SQLite database for indexing and querying files by labels.
 
-### Configuration
-
-Enable auto-sync in `config.yaml`:
-
-```yaml
-llm:
-  provider: gemini
-  api_key: ${GEMINI_API_KEY}
-  model: gemini-1.5-flash
-  auto_sync: true  # Auto-sync to database on sidecar/labels commands
+```bash
+filekor db              # Summary: path, schema, files, labels, size
+filekor db files        # List all indexed files
+filekor db labels       # List all labels with file counts
+filekor db search <q>   # Full-text search
+filekor db show <hash>  # Show file details by SHA256
 ```
 
-When `auto_sync: true`, the database at `~/.filekor/index.db` is automatically updated when using `filekor sidecar` or `filekor labels` commands.
-
-### Library Usage
-
-Use filekor as a Python library for database queries:
-
-```python
-from filekor.db import get_db, sync_file, query_by_label
-
-# Get database instance (lazy singleton - created on first call)
-db = get_db()
-
-# Manually sync a .kor file
-sync_file("./documento.kor")
-
-# Query files by label
-files = query_by_label("finance")
-# ['/docs/report.pdf', '/docs/invoice.pdf']
-
-# Query all files
-all_files = db.query_all()
-```
+Full documentation: [database.md](database.md)
 
 ---
 
