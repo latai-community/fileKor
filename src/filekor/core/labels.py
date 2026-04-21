@@ -10,30 +10,12 @@ from filekor.constants import (
     CONFIG_LLM_KEY,
     CONFIG_ROOT_KEY,
     CONFIG_WORKERS_KEY,
+    DEFAULT_LABELS,
     FILEKOR_DIR,
     LABELS_PROPERTIES_FILENAME,
     PROVIDER_GEMINI,
 )
 from filekor.core.llm import LLMProvider, get_provider
-
-# Default labels when no config file is found
-DEFAULT_LABELS: Dict[str, List[str]] = {
-    "finance": [
-        "economy",
-        "budget",
-        "cost",
-        "costs",
-        "money",
-        "financial",
-        "billing",
-        "invoice",
-    ],
-    "contract": ["agreement", "contract", "terms", "conditions", "legal"],
-    "legal": ["law", "compliance", "gdpr", "privacy", "policy", "regulation"],
-    "architecture": ["design", "architecture", "blueprint", "structure"],
-    "specification": ["spec", "specs", "requirement", "requirements"],
-    "documentation": ["docs", "documentation", "manual", "guide", "readme"],
-}
 
 
 class LabelsConfig:
