@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path.home() / ".filekor" / "index.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # SQL Schema definitions
 SCHEMA_SQL = """
@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS files (
     modified_at TIMESTAMP,
     hash_sha256 TEXT,
     metadata_json TEXT,
+    summary_short TEXT,
+    summary_long TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -68,6 +70,8 @@ CREATE INDEX IF NOT EXISTS idx_files_path ON files(file_path);
 CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
     name,
     metadata_json,
+    summary_short,
+    summary_long,
     content='files',
     content_rowid='id',
     tokenize='porter unicode61'
@@ -75,22 +79,22 @@ CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
 
 -- Trigger: Insert into FTS5 when file is inserted
 CREATE TRIGGER IF NOT EXISTS files_ai AFTER INSERT ON files BEGIN
-    INSERT INTO files_fts(rowid, name, metadata_json)
-    VALUES (new.id, new.name, new.metadata_json);
+    INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+    VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
 END;
 
 -- Trigger: Delete from FTS5 when file is deleted
 CREATE TRIGGER IF NOT EXISTS files_ad AFTER DELETE ON files BEGIN
-    INSERT INTO files_fts(files_fts, rowid, name, metadata_json)
-    VALUES ('delete', old.id, old.name, old.metadata_json);
+    INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+    VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
 END;
 
 -- Trigger: Update FTS5 when file is updated
 CREATE TRIGGER IF NOT EXISTS files_au AFTER UPDATE ON files BEGIN
-    INSERT INTO files_fts(files_fts, rowid, name, metadata_json)
-    VALUES ('delete', old.id, old.name, old.metadata_json);
-    INSERT INTO files_fts(rowid, name, metadata_json)
-    VALUES (new.id, new.name, new.metadata_json);
+    INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+    VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
+    INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+    VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
 END;
 """
 
@@ -137,12 +141,20 @@ class Database:
         This is idempotent - if already initialized, it does nothing.
 
         Args:
-            path: Optional custom database path (default: ~/.filekor/index.db).
+            path: Optional custom database path. If None, reads from
+                  config.yaml (filekor.db.path) or falls back to
+                  ~/.filekor/index.db.
         """
         if self._initialized:
             return
 
-        self._path = path or DB_PATH
+        if path is None:
+            from filekor.core.config import FilekorConfig
+
+            config = FilekorConfig.load()
+            self._path = config.db_path
+        else:
+            self._path = path
         self._local = threading.local()
         self._connection_lock = threading.Lock()
 
@@ -163,7 +175,7 @@ class Database:
         """Initialize the database schema.
 
         Creates tables and indexes if they don't exist.
-        Also sets up schema version tracking.
+        Also sets up schema version tracking and runs migrations.
         """
         with self._get_connection() as conn:
             # Enable foreign keys
@@ -177,6 +189,83 @@ class Database:
                 "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
                 (SCHEMA_VERSION,),
             )
+            conn.commit()
+
+        # Run migrations for existing databases
+        self._run_migrations()
+
+    def _run_migrations(self) -> None:
+        """Run database migrations for schema updates.
+
+        Checks the current schema version and applies migrations
+        incrementally to bring the database up to date.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            current_version = row["version"] if row else 0
+
+            if current_version < 2:
+                # Migration v2: Add summary columns to files table
+                try:
+                    conn.execute("ALTER TABLE files ADD COLUMN summary_short TEXT")
+                except Exception:
+                    pass  # Column already exists
+
+                try:
+                    conn.execute("ALTER TABLE files ADD COLUMN summary_long TEXT")
+                except Exception:
+                    pass  # Column already exists
+
+                # Rebuild FTS index with new columns
+                try:
+                    conn.executescript("""
+                        DROP TRIGGER IF EXISTS files_ai;
+                        DROP TRIGGER IF EXISTS files_ad;
+                        DROP TRIGGER IF EXISTS files_au;
+                        DROP TABLE IF EXISTS files_fts;
+
+                        CREATE VIRTUAL TABLE files_fts USING fts5(
+                            name,
+                            metadata_json,
+                            summary_short,
+                            summary_long,
+                            content='files',
+                            content_rowid='id',
+                            tokenize='porter unicode61'
+                        );
+
+                        INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                        SELECT id, name, metadata_json, summary_short, summary_long FROM files;
+
+                        CREATE TRIGGER files_ai AFTER INSERT ON files BEGIN
+                            INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
+                        END;
+
+                        CREATE TRIGGER files_ad AFTER DELETE ON files BEGIN
+                            INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
+                        END;
+
+                        CREATE TRIGGER files_au AFTER UPDATE ON files BEGIN
+                            INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
+                            INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
+                        END;
+                    """)
+                except Exception:
+                    pass
+
+                # Update schema version
+                conn.execute(
+                    "INSERT OR REPLACE INTO schema_version (version) VALUES (?)",
+                    (2,),
+                )
+
             conn.commit()
 
     @contextmanager
@@ -279,8 +368,8 @@ class Database:
                 cursor = conn.execute(
                     """
                     INSERT OR REPLACE INTO files 
-                    (kor_path, file_path, name, extension, size_bytes, modified_at, hash_sha256, metadata_json, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (kor_path, file_path, name, extension, size_bytes, modified_at, hash_sha256, metadata_json, summary_short, summary_long, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         str(kor_file.resolve()),
@@ -291,6 +380,8 @@ class Database:
                         sidecar.file.modified_at,
                         sidecar.file.hash_sha256,
                         json.dumps(metadata_dict) if metadata_dict else None,
+                        sidecar.summary.short if sidecar.summary else None,
+                        sidecar.summary.long if sidecar.summary else None,
                         datetime.now(timezone.utc),
                     ),
                 )
@@ -380,6 +471,24 @@ class Database:
                 results.append(row_dict)
 
             return results
+
+    def query_labels_with_counts(self) -> List[Dict[str, Any]]:
+        """Query all labels with their file counts.
+
+        Returns:
+            List of dicts with 'label' and 'file_count' keys,
+            ordered by file count descending.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT l.label, COUNT(DISTINCT l.file_id) as file_count
+                FROM labels l
+                GROUP BY l.label
+                ORDER BY file_count DESC, l.label ASC
+                """
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_file_by_path(self, file_path: str) -> Optional[DBFile]:
         """Get a file record by its path.
@@ -771,6 +880,22 @@ def query_all(db: Optional[Database] = None) -> List[Dict[str, Any]]:
     if db is None:
         db = get_db()
     return db.query_all()
+
+
+def query_labels_with_counts(
+    db: Optional[Database] = None,
+) -> List[Dict[str, Any]]:
+    """Convenience function to query labels with file counts.
+
+    Args:
+        db: Optional Database instance (uses singleton if not provided).
+
+    Returns:
+        List of dicts with 'label' and 'file_count' keys.
+    """
+    if db is None:
+        db = get_db()
+    return db.query_labels_with_counts()
 
 
 def query_by_labels(
