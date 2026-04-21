@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from filekor.labels import (
+from filekor.core.labels import (
     LabelsConfig,
     LLMConfig,
     suggest_labels,
@@ -228,7 +228,7 @@ class TestSuggestFromContent:
 
         long_content = "a" * 500
 
-        with patch("filekor.labels.get_provider") as mock_get_provider:
+        with patch("filekor.core.labels.get_provider") as mock_get_provider:
             mock_provider = Mock()
             mock_provider.extract_labels.return_value = ["finance"]
             mock_get_provider.return_value = mock_provider
@@ -244,7 +244,7 @@ class TestSuggestFromContent:
         config = LabelsConfig({"finance": ["budget", "cost"]})
         llm_config = LLMConfig(enabled=True, api_key="test-key")
 
-        with patch("filekor.labels.get_provider") as mock_get_provider:
+        with patch("filekor.core.labels.get_provider") as mock_get_provider:
             mock_provider = Mock()
             mock_provider.extract_labels.side_effect = Exception("API Error")
             mock_get_provider.return_value = mock_provider

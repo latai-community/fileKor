@@ -486,7 +486,7 @@ class TestCLISyncIntegration:
     def test_auto_sync_enabled_creates_db_entry(self, tmp_path):
         """Verify CLI auto-syncs when auto_sync is enabled."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.labels import LLMConfig
+        from filekor.core.labels import LLMConfig
 
         # Reset singleton
         Database._instance = None
@@ -523,7 +523,7 @@ class TestCLISyncIntegration:
     def test_auto_sync_disabled_skips_db(self, tmp_path):
         """Verify CLI skips DB sync when auto_sync is disabled."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.labels import LLMConfig
+        from filekor.core.labels import LLMConfig
 
         # Reset singleton
         Database._instance = None
@@ -540,7 +540,7 @@ class TestCLISyncIntegration:
     def test_auto_sync_error_does_not_fail_cli(self, tmp_path):
         """Verify CLI continues even if DB sync fails."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.labels import LLMConfig
+        from filekor.core.labels import LLMConfig
 
         llm_config = LLMConfig(auto_sync=True)
         kor_path = tmp_path / "nonexistent.kor"

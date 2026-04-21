@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from filekor.llm import (
+from filekor.core.llm import (
     GoogleProvider,
     GroqProvider,
     OpenAIProvider,
