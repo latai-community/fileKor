@@ -141,7 +141,21 @@ def _labels_file(
 
     kor_path.write_text(sidecar_file.to_yaml())
 
+    _auto_sync_hook(kor_path, llm_config_obj)
     console.print(f"[bold green]Saved: {kor_path}[/bold green]")
+
+
+def _auto_sync_hook(kor_path: Path, llm_config: LLMConfig) -> None:
+    """Auto-sync sidecar to database if enabled."""
+    if not llm_config.auto_sync:
+        return
+
+    try:
+        from filekor.db import sync_file
+
+        sync_file(str(kor_path))
+    except Exception:
+        pass
 
 
 def _labels_directory(
@@ -217,6 +231,7 @@ def _labels_directory(
             sidecar.update_labels(suggestions)
 
             kor_path.write_text(sidecar.to_yaml())
+            _auto_sync_hook(kor_path, llm_config_obj)
 
             return (file_path, True, suggestions, None)
         except Exception as e:
