@@ -248,8 +248,8 @@ Synchronize a .kor file to the database. Parses the sidecar and inserts/updates 
 ```python
 from filekor.db import sync_file
 
-file_id = sync_file("./docs/report.pdf.kor")
-print(f"Synced with ID: {file_id}")
+file_ids = sync_file("./docs/report.pdf.kor")
+print(f"Synced with IDs: {file_ids}")
 ```
 
 **Parameters:**
@@ -558,7 +558,7 @@ sidecar = Sidecar.create(
 
 **Returns:** `Sidecar` instance (without labels).
 
-> **Note:** Labels are not auto-generated. Use `suggest_labels()` + `update_labels()` or the `filekor labels` CLI command.
+> **Note:** Labels and summaries are not auto-generated. Use `suggest_labels()` + `update_labels()` for labels, or `generate_summary()` for summaries. Alternatively, use the CLI commands `filekor labels` or `filekor summary`.
 
 ---
 
@@ -1530,7 +1530,7 @@ filekor:
 | Function/Class | Description |
 |----------------|-------------|
 | `get_db(path?)` | Get singleton Database instance |
-| `sync_file(kor_path, db?)` | Sync .kor to database (returns file ID) |
+| `sync_file(kor_path, db?)` | Sync .kor to database (returns list of file IDs) |
 | `query_by_label(label, db?)` | Query by single label |
 | `query_by_labels(labels, db?)` | Query by multiple labels (OR) |
 | `query_all(db?)` | Get all files |

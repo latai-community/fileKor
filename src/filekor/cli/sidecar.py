@@ -10,6 +10,7 @@ from filekor.cli.base import console, extract_text
 from filekor.adapters.exiftool import PyExifToolAdapter
 from filekor.constants import FILEKOR_DIR, KOR_EXTENSION, MERGED_KOR_FILENAME
 from filekor.core.hasher import calculate_sha256
+from filekor.core.config import FilekorConfig
 from filekor.core.labels import LabelsConfig, LLMConfig
 from filekor.core.processor import DirectoryProcessor, SUPPORTED_EXTENSIONS
 from filekor.sidecar import Sidecar, Content
@@ -68,18 +69,11 @@ from filekor.core.events import create_emitter
     help="Enable event emitter for real-time progress",
 )
 @click.option(
-    "--merge",
-    "merge",
-    is_flag=True,
-    default=None,
-    help="Generate merged .kor file (default for directories)",
-)
-@click.option(
     "--no-merge",
     "no_merge",
     is_flag=True,
     default=False,
-    help="Generate individual .kor files (one per file)",
+    help="Generate individual .kor files instead of merged.kor",
 )
 @click.option(
     "--db",
@@ -87,6 +81,26 @@ from filekor.core.events import create_emitter
     is_flag=True,
     default=False,
     help="Use database to regenerate .kor files when available",
+)
+@click.option(
+    "--labels",
+    "add_labels",
+    is_flag=True,
+    default=False,
+    help="Generate labels via LLM",
+)
+@click.option(
+    "--summary",
+    "add_summary",
+    is_flag=True,
+    default=False,
+    help="Generate summaries via LLM (short + long by default)",
+)
+@click.option(
+    "--summary-length",
+    type=click.Choice(["short", "long", "both"], case_sensitive=False),
+    default=None,
+    help="Summary length when --summary is used (default: both)",
 )
 def sidecar(
     path: str,
@@ -97,9 +111,11 @@ def sidecar(
     directory: bool,
     workers: Optional[int],
     watch: bool,
-    merge: Optional[bool],
     no_merge: bool,
     use_db: bool,
+    add_labels: bool,
+    add_summary: bool,
+    summary_length: Optional[str],
 ) -> None:
     """Generate a .kor sidecar file with full metadata for a supported file.
 
@@ -112,21 +128,27 @@ def sidecar(
         directory: Whether to process a directory.
         workers: Number of parallel workers.
         watch: Enable event emitter for progress.
-
-    Raises:
-        RuntimeError: If LLM is not configured in config.yaml.
+        no_merge: Generate individual .kor files instead of merged.kor.
+        use_db: Use database to regenerate when available.
+        add_labels: Generate labels via LLM.
+        add_summary: Generate summaries via LLM.
+        summary_length: Summary length when add_summary is used ("short", "long", "both").
     """
     if directory:
         _sidecar_directory(
-            path, output, config, verbose, workers, watch, merge, no_merge, use_db
+            path, output, config, verbose, workers, watch, no_merge, use_db,
+            add_labels, add_summary, summary_length,
         )
     else:
-        _sidecar_file(path, output, no_cache, config, verbose, merge, no_merge, use_db)
+        _sidecar_file(
+            path, output, no_cache, config, verbose, no_merge, use_db,
+            add_labels, add_summary, summary_length,
+        )
 
 
-def _auto_sync_hook(sidecar_path: Path, llm_config: LLMConfig, verbose: bool) -> None:
+def _auto_sync_hook(sidecar_path: Path, auto_sync: bool, verbose: bool) -> None:
     """Auto-sync sidecar to database if enabled."""
-    if not llm_config.auto_sync:
+    if not auto_sync:
         return
 
     try:
@@ -146,12 +168,16 @@ def _sidecar_file(
     no_cache: bool,
     config: Optional[str],
     verbose: bool,
-    merge: Optional[bool] = None,
     no_merge: bool = False,
     use_db: bool = False,
+    add_labels: bool = False,
+    add_summary: bool = False,
+    summary_length: Optional[str] = None,
 ) -> None:
-    """Generate sidecar for a single file."""
+    """Generate sidecar for a single file. Uses DirectoryProcessor for consistent behavior."""
     llm_config = LLMConfig.load(config) if config else LLMConfig.load()
+    filekor_config = FilekorConfig.load(config) if config else FilekorConfig.load()
+    labels_config = LabelsConfig.load()
 
     if verbose:
         if config:
@@ -180,20 +206,29 @@ def _sidecar_file(
         click.echo(f"Error: Unsupported file type: .{file_ext}", err=True)
         sys.exit(1)
 
-    if output:
-        sidecar_path = Path(output)
-    else:
-        filekor_dir = file_path.parent / FILEKOR_DIR
-        filekor_dir.mkdir(parents=True, exist_ok=True)
-        sidecar_path = filekor_dir / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
+    if add_summary and summary_length is None:
+        summary_length = "both"
 
-    if sidecar_path.exists() and not no_cache:
-        click.echo(f"Info: Sidecar already exists: {sidecar_path}", err=True)
-        sys.exit(0)
+    do_merge = not no_merge
+    output_dir_for_kor = None
+    sidecar_path = None
+
+    if not do_merge:
+        if output:
+            sidecar_path = Path(output)
+        else:
+            filekor_dir = file_path.parent / FILEKOR_DIR
+            filekor_dir.mkdir(parents=True, exist_ok=True)
+            sidecar_path = filekor_dir / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
+
+        if sidecar_path.exists() and not no_cache:
+            click.echo(f"Info: Sidecar already exists: {sidecar_path}", err=True)
+            sys.exit(0)
+        output_dir_for_kor = sidecar_path.parent
 
     file_hash = calculate_sha256(path)
-
     db_record = None
+    processed_sidecar = None
     if use_db:
         try:
             from filekor.db import get_file_by_hash
@@ -203,63 +238,152 @@ def _sidecar_file(
                 console.print(
                     f"[green]DB hit:[/green] {file_path.name} ({file_hash[:16]}...)"
                 )
+                processed_sidecar = Sidecar.load(db_record["kor_path"])
         except Exception:
             pass
 
-    adapter = PyExifToolAdapter()
-    exif_available = adapter.is_available()
-
-    metadata = None
-    if exif_available:
-        try:
-            metadata = adapter.extract_metadata(path)
-            if verbose:
-                console.print("[green]Metadata:[/green] extracted")
-        except (FileNotFoundError, PermissionError, Exception):
-            pass
-
-    content_obj = None
-    try:
-        _, word_count, page_count = extract_text(path)
-        content_obj = Content(
-            language="en",
-            word_count=word_count,
-            page_count=page_count,
-        )
-        if verbose:
-            console.print(
-                f"[green]Text:[/green] {word_count} words, {page_count} pages"
-            )
-    except Exception as e:
-        if verbose:
-            console.print(f"[red]Text extraction failed:[/red] {e}")
-        pass
-
-    sidecar = Sidecar.create(
-        path,
-        metadata=metadata,
-        content=content_obj,
-        verbose=verbose,
+    processor = DirectoryProcessor(
+        workers=llm_config.workers,
+        output_dir=output_dir_for_kor,
+        llm_config=llm_config,
+        labels_config=labels_config,
+        write_kor=not do_merge,
+        add_labels=add_labels,
+        add_summary=add_summary,
+        summary_length=summary_length or "both",
     )
 
-    do_merge = not no_merge
+    results = processor.process_directory(file_path.parent, callback=None)
 
+    processed_files = 0
     output_to_sync = None
 
-    if do_merge:
-        filekor_dir = file_path.parent / FILEKOR_DIR
-        filekor_dir.mkdir(parents=True, exist_ok=True)
-        merged_path = filekor_dir / MERGED_KOR_FILENAME
-        merged_path.write_text(sidecar.to_yaml())
-        console.print(f"[bold green]Created:[/bold green] {merged_path}")
-        output_to_sync = merged_path
-    else:
-        sidecar_path.write_text(sidecar.to_yaml())
-        console.print(f"[bold green]Created:[/bold green] {sidecar_path}")
-        output_to_sync = sidecar_path
+    for result in results:
+        if result.file_path == file_path and result.success:
+            processed_files += 1
+
+            if do_merge:
+                filekor_dir = file_path.parent / FILEKOR_DIR
+                filekor_dir.mkdir(parents=True, exist_ok=True)
+                merged_path = filekor_dir / MERGED_KOR_FILENAME
+
+                if result.sidecar:
+                    merged_path.write_text(result.sidecar.to_yaml())
+                    console.print(f"[bold green]Created:[/bold green] {merged_path}")
+                    output_to_sync = merged_path
+            else:
+                if result.output_path:
+                    result.output_path.write_text(result.sidecar.to_yaml())
+                    console.print(f"[bold green]Created:[/bold green] {result.output_path}")
+                    output_to_sync = result.output_path
+
+    if processed_files == 0 and processed_sidecar:
+        if do_merge:
+            filekor_dir = file_path.parent / FILEKOR_DIR
+            filekor_dir.mkdir(parents=True, exist_ok=True)
+            merged_path = filekor_dir / MERGED_KOR_FILENAME
+            merged_path.write_text(processed_sidecar.to_yaml())
+            console.print(f"[bold green]Created:[/bold green] {merged_path}")
+            output_to_sync = merged_path
+        else:
+            sidecar_path.write_text(processed_sidecar.to_yaml())
+            console.print(f"[bold green]Created:[/bold green] {sidecar_path}")
+            output_to_sync = sidecar_path
 
     if output_to_sync:
-        _auto_sync_hook(output_to_sync, llm_config, verbose)
+        _auto_sync_hook(output_to_sync, filekor_config.auto_sync, verbose)
+
+
+def _discover_files(root: Path) -> dict[Path, list[Path]]:
+    """Discover supported files recursively, grouped by parent directory.
+    
+    Returns:
+        Dict mapping parent directory -> list of files in that directory.
+    """
+    all_files = []
+    for ext in SUPPORTED_EXTENSIONS:
+        all_files.extend(root.glob(f"**/*.{ext}"))
+
+    seen = set()
+    unique_files = [f for f in all_files if f not in seen and FILEKOR_DIR not in f.parts and not seen.add(f)]
+
+    groups: dict[Path, list[Path]] = {}
+    for f in unique_files:
+        parent = f.parent
+        if parent not in groups:
+            groups[parent] = []
+        groups[parent].append(f)
+
+    return groups
+
+
+
+
+
+def _write_merged_kor(
+    results: list,
+    processed_sidecars: list,
+    do_merge: bool,
+) -> tuple[int, int, list[Path]]:
+    """Write merged.kor files for each directory group.
+    
+    Uses sidecar from result if available, otherwise loads from output_path on disk.
+    
+    Returns:
+        Tuple of (directories_processed, total_files, merged_paths).
+    """
+    if not do_merge:
+        return 0, 0, []
+
+    sidecars_by_dir: dict[Path, list[tuple[Path, Sidecar]]] = {}
+
+    for result in results:
+        if not result.success:
+            continue
+        sidecar = None
+        if result.sidecar is not None:
+            sidecar = result.sidecar
+        elif result.output_path and result.output_path.exists():
+            try:
+                sidecar = Sidecar.load(str(result.output_path))
+            except Exception:
+                pass
+
+        if sidecar:
+            parent = result.file_path.parent
+            if parent not in sidecars_by_dir:
+                sidecars_by_dir[parent] = []
+            sidecars_by_dir[parent].append((result.file_path, sidecar))
+
+    for file_path, sidecar in processed_sidecars:
+        parent = file_path.parent
+        if parent not in sidecars_by_dir:
+            sidecars_by_dir[parent] = []
+        sidecars_by_dir[parent].append((file_path, sidecar))
+
+    total_files = 0
+    dirs_merged = 0
+    merged_paths: list[Path] = []
+
+    for parent_dir, sidecars in sidecars_by_dir.items():
+        if not sidecars:
+            continue
+
+        filekor_dir = parent_dir / FILEKOR_DIR
+        filekor_dir.mkdir(parents=True, exist_ok=True)
+        merged_path = filekor_dir / MERGED_KOR_FILENAME
+
+        merged_yaml = "".join("---\n" + sc.to_yaml() + "\n" for _, sc in sidecars)
+        merged_path.write_text(merged_yaml)
+
+        console.print(
+            f"[bold green]Merged:[/bold green] {len(sidecars)} files -> {merged_path}"
+        )
+        merged_paths.append(merged_path)
+        total_files += len(sidecars)
+        dirs_merged += 1
+
+    return dirs_merged, total_files, merged_paths
 
 
 def _sidecar_directory(
@@ -269,19 +393,32 @@ def _sidecar_directory(
     verbose: bool,
     workers: Optional[int],
     watch: bool,
-    merge: Optional[bool] = None,
     no_merge: bool = False,
     use_db: bool = False,
+    add_labels: bool = False,
+    add_summary: bool = False,
+    summary_length: Optional[str] = None,
 ) -> None:
-    """Generate sidecar files for all supported files in a directory."""
+    """Generate sidecar files for all supported files in a directory.
+    
+    Behavior:
+        - Default: writes one merged.kor per directory containing files
+        - --no-merge: writes individual .kor files per file
+        - --labels: adds labels via LLM
+        - --summary: adds summaries via LLM
+    """
     dir_path = Path(directory)
     if not dir_path.is_dir():
         click.echo(f"Error: Not a directory: {directory}", err=True)
         sys.exit(1)
 
     llm_config = LLMConfig.load(config) if config else LLMConfig.load()
+    filekor_config = FilekorConfig.load(config) if config else FilekorConfig.load()
     labels_config = LabelsConfig.load()
     workers = workers or llm_config.workers
+    do_merge = not no_merge
+    if add_summary and summary_length is None:
+        summary_length = "both"
 
     if verbose:
         console.print(f"[blue]Workers:[/blue] {workers}")
@@ -289,9 +426,38 @@ def _sidecar_directory(
 
     emitter = create_emitter(watch=watch)
 
-    do_merge = merge if merge is not None else True
-    if no_merge:
-        do_merge = False
+    file_groups = _discover_files(dir_path)
+
+    flat_files = [f for files in file_groups.values() for f in files]
+    if not flat_files:
+        console.print(f"[yellow]No supported files found in {directory}[/yellow]")
+        sys.exit(0)
+
+    console.print(f"[blue]Found {len(flat_files)} files to process[/blue]")
+
+    processed_sidecars = []
+    if use_db:
+        try:
+            from filekor.db import get_file_by_hash
+
+            console.print("[blue]Using database for regeneration when available[/blue]")
+            for file_path in flat_files:
+                file_hash = calculate_sha256(str(file_path))
+                db_record = get_file_by_hash(file_hash)
+                if db_record:
+                    console.print(
+                        f"[green]DB hit:[/green] {file_path.name} ({file_hash[:16]}...)"
+                    )
+                    try:
+                        sidecar = Sidecar.load(db_record["kor_path"])
+                        processed_sidecars.append((file_path, sidecar))
+                        flat_files.remove(file_path)
+                    except Exception:
+                        pass
+        except Exception:
+            console.print(
+                "[yellow]Database not available, processing normally[/yellow]"
+            )
 
     output_dir = Path(output) if output else None
 
@@ -300,61 +466,13 @@ def _sidecar_directory(
         output_dir=output_dir,
         llm_config=llm_config,
         labels_config=labels_config,
+        write_kor=not do_merge,
+        add_labels=add_labels,
+        add_summary=add_summary,
+        summary_length=summary_length or "both",
     )
 
-    files = []
-    for ext in SUPPORTED_EXTENSIONS:
-        files.extend(dir_path.glob(f"**/*.{ext}"))
-
-    seen = set()
-    unique_files = []
-    for f in files:
-        if f not in seen and FILEKOR_DIR not in f.parts:
-            seen.add(f)
-            unique_files.append(f)
-    files = unique_files
-
-    if not files:
-        console.print(f"[yellow]No supported files found in {directory}[/yellow]")
-        sys.exit(0)
-
-    console.print(f"[blue]Found {len(files)} files to process[/blue]")
-
-    processed_sidecars = []
-    db_available = False
-
-    if use_db:
-        try:
-            from filekor.db import get_file_by_hash
-
-            db_available = True
-            console.print("[blue]Using database for regeneration when available[/blue]")
-        except Exception:
-            console.print(
-                "[yellow]Database not available, processing normally[/yellow]"
-            )
-
-    if use_db and db_available:
-        processed_files = []
-        for file_path in files:
-            file_hash = calculate_sha256(str(file_path))
-
-            db_record = get_file_by_hash(file_hash)
-            if db_record:
-                console.print(
-                    f"[green]DB hit:[/green] {file_path.name} ({file_hash[:16]}...)"
-                )
-                try:
-                    sidecar = Sidecar.load(db_record["kor_path"])
-                    processed_sidecars.append((file_path, sidecar))
-                except Exception:
-                    processed_files.append(file_path)
-            else:
-                processed_files.append(file_path)
-
-        files = processed_files
-
-    emitter.started(directory, len(files))
+    emitter.started(directory, len(flat_files))
 
     successful = 0
     failed = 0
@@ -365,13 +483,13 @@ def _sidecar_directory(
             successful += 1
             emitter.completed(
                 str(result.file_path),
-                str(result.output_path),
+                str(result.output_path) if result.output_path else "",
                 result.labels,
             )
             if verbose:
                 console.print(f"[green]OK[/green] {result.file_path.name}")
             if result.output_path:
-                _auto_sync_hook(result.output_path, llm_config, verbose)
+                _auto_sync_hook(result.output_path, filekor_config.auto_sync, verbose)
         else:
             failed += 1
             emitter.error(str(result.file_path), result.error or "Unknown error")
@@ -379,31 +497,17 @@ def _sidecar_directory(
 
     results = processor.process_directory(dir_path, callback=on_result)
 
-    for result in results:
-        if result.success and result.output_path:
-            try:
-                sidecar = Sidecar.load(str(result.output_path))
-                processed_sidecars.append((result.file_path, sidecar))
-            except Exception:
-                pass
+    dirs_merged, total_files, merged_paths = _write_merged_kor(
+        results, processed_sidecars, do_merge
+    )
 
-    if do_merge and processed_sidecars:
-        filekor_dir = dir_path / FILEKOR_DIR
-        filekor_dir.mkdir(parents=True, exist_ok=True)
-        merged_path = filekor_dir / MERGED_KOR_FILENAME
-
-        merged_yaml = ""
-        for _, sidecar in processed_sidecars:
-            merged_yaml += sidecar.to_yaml() + "\n"
-
-        merged_path.write_text(merged_yaml)
-        console.print(
-            f"[bold green]Merged:[/bold green] {len(processed_sidecars)} files -> {merged_path}"
-        )
+    for merged_path in merged_paths:
+        _auto_sync_hook(merged_path, filekor_config.auto_sync, verbose)
 
     emitter.finished(len(results), successful, failed)
 
     console.print(
         f"\n[bold]Completed:[/bold] {successful}/{len(results)} successful, {failed} failed"
     )
+
     sys.exit(0 if failed == 0 else 1)

@@ -214,31 +214,15 @@ class Sidecar(BaseModel):
         return sha256_hash.hexdigest()
 
     @classmethod
-    def load(cls, path: str) -> "Sidecar":
-        """Load a .kor sidecar file from disk.
+    def from_dict(cls, data: dict) -> "Sidecar":
+        """Reconstruct a Sidecar from a parsed dict.
 
         Args:
-            path: Path to the .kor file.
+            data: Dictionary with sidecar data (as produced by yaml.safe_load).
 
         Returns:
-            Loaded Sidecar instance.
-
-        Raises:
-            FileNotFoundError: If .kor file does not exist.
-            ValueError: If .kor file is invalid YAML.
+            Reconstructed Sidecar instance.
         """
-        import yaml
-
-        kor_path = Path(path)
-        if not kor_path.exists():
-            raise FileNotFoundError(f"Sidecar file not found: {path}")
-
-        try:
-            data = yaml.safe_load(kor_path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as e:
-            raise ValueError(f"Invalid sidecar file: {e}")
-
-        # Reconstruct Sidecar from YAML data
         file_data = data.get("file", {})
         metadata_data = data.get("metadata")
         content_data = data.get("content")
@@ -277,6 +261,33 @@ class Sidecar(BaseModel):
             parser_status=data.get("parser_status", "OK"),
             generated_at=data.get("generated_at"),
         )
+
+    @classmethod
+    def load(cls, path: str) -> "Sidecar":
+        """Load a .kor sidecar file from disk.
+
+        Args:
+            path: Path to the .kor file.
+
+        Returns:
+            Loaded Sidecar instance.
+
+        Raises:
+            FileNotFoundError: If .kor file does not exist.
+            ValueError: If .kor file is invalid YAML.
+        """
+        import yaml
+
+        kor_path = Path(path)
+        if not kor_path.exists():
+            raise FileNotFoundError(f"Sidecar file not found: {path}")
+
+        try:
+            data = yaml.safe_load(kor_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid sidecar file: {e}")
+
+        return cls.from_dict(data)
 
     def update_labels(self, labels: List[str]) -> None:
         """Update labels in this sidecar (in-place).

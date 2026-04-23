@@ -111,6 +111,10 @@ filekor sidecar ./documentos/ --dir --watch
 | `-d`, `--dir` | Process directory instead of single file |
 | `--workers` | Number of parallel workers (from config.yaml) |
 | `--watch` | Enable event emitter for real-time progress |
+| `--no-merge` | Generate individual .kor files instead of merged.kor |
+| `--labels` | Generate labels via LLM |
+| `--summary` | Generate summaries via LLM (short + long by default) |
+| `--summary-length` | Summary length: short, long, or both |
 
 **Output:** Creates `{filename}.kor` in same directory. For directory: creates `.filekor/` subdirectory with .kor files.
 
@@ -282,6 +286,21 @@ filekor sidecar ./documentos/ --dir --workers 8
 
 # Watch mode for real-time progress
 filekor sidecar ./documentos/ --dir --watch
+
+# Generate individual .kor files instead of merged.kor
+filekor sidecar ./documentos/ --dir --no-merge
+
+# Add labels via LLM
+filekor sidecar ./documentos/ --dir --labels
+
+# Add summaries via LLM (short + long by default)
+filekor sidecar ./documentos/ --dir --summary
+
+# Add only short summary
+filekor sidecar ./documentos/ --dir --summary=short
+
+# Add both labels and summaries
+filekor sidecar ./documentos/ --dir --labels --summary
 
 # Add labels to all files
 filekor labels ./documentos/ --dir

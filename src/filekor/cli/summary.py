@@ -9,6 +9,7 @@ import click
 
 from filekor.cli.base import console, extract_text
 from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
+from filekor.core.config import FilekorConfig
 from filekor.core.labels import LLMConfig
 from filekor.core.summary import generate_summary, SummaryResult
 from filekor.core.processor import SUPPORTED_EXTENSIONS
@@ -131,6 +132,9 @@ def _summary_file(
     llm_config_obj = (
         LLMConfig.load(llm_config_path) if llm_config_path else LLMConfig.load()
     )
+    filekor_config = (
+        FilekorConfig.load(llm_config_path) if llm_config_path else FilekorConfig.load()
+    )
     if not llm_config_obj.enabled or not llm_config_obj.api_key:
         console.print(
             "[red]Error: LLM is not configured. Please enable LLM in config.yaml "
@@ -185,7 +189,7 @@ def _summary_file(
 
     kor_path.write_text(sidecar_file.to_yaml())
 
-    _auto_sync_hook(kor_path, llm_config_obj)
+    _auto_sync_hook(kor_path, filekor_config.auto_sync)
     console.print(f"[bold green]Saved: {kor_path}[/bold green]")
 
 
@@ -206,6 +210,9 @@ def _summary_directory(
 
     llm_config_obj = (
         LLMConfig.load(llm_config_path) if llm_config_path else LLMConfig.load()
+    )
+    filekor_config = (
+        FilekorConfig.load(llm_config_path) if llm_config_path else FilekorConfig.load()
     )
     if not llm_config_obj.enabled or not llm_config_obj.api_key:
         console.print(
@@ -289,7 +296,7 @@ def _summary_directory(
                     / FILEKOR_DIR
                     / f"{file_path.stem}.{file_ext}{KOR_EXTENSION}"
                 )
-                _auto_sync_hook(kor_path, llm_config_obj)
+                _auto_sync_hook(kor_path, filekor_config.auto_sync)
                 short_preview = (result.short[:60] + "...") if result.short else "none"
                 emitter.completed(str(file_path), str(kor_path))
                 console.print(f"[green]OK[/green] {file_path.name}: {short_preview}")
@@ -305,9 +312,9 @@ def _summary_directory(
     sys.exit(0 if failed == 0 else 1)
 
 
-def _auto_sync_hook(kor_path: Path, llm_config: LLMConfig) -> None:
+def _auto_sync_hook(kor_path: Path, auto_sync: bool) -> None:
     """Auto-sync sidecar to database if enabled."""
-    if not llm_config.auto_sync:
+    if not auto_sync:
         return
 
     try:

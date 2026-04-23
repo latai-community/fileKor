@@ -71,22 +71,6 @@ class TestSidecarFile:
         assert "merged.kor" in result.output
 
     @patch("filekor.cli.HAS_PYPDF", False)
-    def test_sidecar_file_merge_flag(self, tmp_path):
-        """--merge generates merged.kor."""
-        test_file = tmp_path / "doc.txt"
-        test_file.write_text("hello world")
-
-        runner = CliRunner()
-        with patch("filekor.cli.sidecar.extract_text") as mock_extract:
-            mock_extract.return_value = ("hello world", 2, 1)
-            with patch("filekor.cli.sidecar._auto_sync_hook"):
-                result = runner.invoke(sidecar, [str(test_file), "--merge"])
-
-        assert result.exit_code == 0
-        merged = tmp_path / ".filekor" / "merged.kor"
-        assert merged.exists()
-
-    @patch("filekor.cli.HAS_PYPDF", False)
     def test_sidecar_file_no_merge_flag(self, tmp_path):
         """--no-merge generates individual .kor file."""
         test_file = tmp_path / "doc.txt"
@@ -117,9 +101,9 @@ class TestSidecarFile:
 
         assert result.exit_code == 0
         assert (
-            "Metadata:" in result.output
-            or "Text:" in result.output
-            or "Labels:" in result.output
+            "Config:" in result.output
+            or "LLM:" in result.output
+            or "Created:" in result.output
         )
 
     def test_sidecar_file_unsupported_type(self, tmp_path):

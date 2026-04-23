@@ -204,7 +204,6 @@ class LLMConfig:
     api_key: Optional[str]
     max_content_chars: int
     workers: int
-    auto_sync: bool
 
     def __init__(
         self,
@@ -214,7 +213,6 @@ class LLMConfig:
         api_key: Optional[str] = None,
         max_content_chars: int = 1500,
         workers: int = 4,
-        auto_sync: bool = False,
     ):
         """Initialize LLMConfig.
 
@@ -225,7 +223,6 @@ class LLMConfig:
             api_key: API key for the provider.
             max_content_chars: Maximum characters to send to LLM.
             workers: Number of parallel workers for directory processing.
-            auto_sync: Whether to auto-sync to SQLite database after operations.
         """
         self.enabled = enabled
         self.provider = provider
@@ -233,7 +230,6 @@ class LLMConfig:
         self.api_key = api_key
         self.max_content_chars = max_content_chars
         self.workers = workers
-        self.auto_sync = auto_sync
 
     @classmethod
     def load(cls, custom_path: Optional[str] = None) -> "LLMConfig":
@@ -287,7 +283,6 @@ class LLMConfig:
                             api_key=api_key,
                             max_content_chars=llm_config.get("max_content_chars", 1500),
                             workers=workers,
-                            auto_sync=llm_config.get("auto_sync", False),
                         )
                 except Exception:
                     # If config is invalid, fall back to defaults

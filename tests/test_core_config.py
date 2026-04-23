@@ -17,13 +17,13 @@ class TestFilekorConfigInit:
 
         assert config.db_path == DEFAULT_DB_PATH
         assert config.workers == 4
+        assert config.auto_sync is False
         assert config.llm.enabled is False
         assert config.llm.provider == "gemini"
         assert config.llm.model == "gemini-2.0-flash"
         assert config.llm.api_key is None
         assert config.llm.max_content_chars == 1500
         assert config.llm.workers == 4
-        assert config.llm.auto_sync is False
 
     def test_custom_db_path(self, tmp_path):
         """Custom db_path is expanded and resolved."""
@@ -39,17 +39,23 @@ class TestFilekorConfigInit:
         assert config.workers == 8
         assert config.llm.workers == 8
 
+    def test_auto_sync_param(self):
+        """auto_sync parameter set on config."""
+        config = FilekorConfig(auto_sync=True)
+
+        assert config.auto_sync is True
+
     def test_llm_as_dict(self):
         """LLM passed as dict is parsed into LLMConfig."""
         config = FilekorConfig(
+            auto_sync=True,
             llm={
                 "enabled": True,
                 "provider": "openai",
                 "model": "gpt-4",
                 "api_key": "secret",
                 "max_content_chars": 500,
-                "auto_sync": True,
-            }
+            },
         )
 
         assert isinstance(config.llm, LLMConfig)
@@ -58,7 +64,6 @@ class TestFilekorConfigInit:
         assert config.llm.model == "gpt-4"
         assert config.llm.api_key == "secret"
         assert config.llm.max_content_chars == 500
-        assert config.llm.auto_sync is True
 
     def test_llm_as_llmconfig_instance(self):
         """LLM passed as LLMConfig instance is used directly."""
@@ -92,7 +97,7 @@ class TestFilekorConfigLoad:
         mock_read_text.return_value = "dummy"
         mock_safe_load.return_value = {
             "filekor": {
-                "db": {"path": "/tmp/test.db"},
+                "db": {"path": "/tmp/test.db", "auto_sync": True},
                 "workers": 2,
                 "llm": {"enabled": True},
             }
@@ -101,6 +106,7 @@ class TestFilekorConfigLoad:
         config = FilekorConfig.load()
 
         assert config.db_path == Path("/tmp/test.db").expanduser().resolve()
+        assert config.auto_sync is True
         assert config.workers == 2
         assert config.llm.enabled is True
 
@@ -154,7 +160,7 @@ class TestFilekorConfigFromDict:
     def test_from_dict_all_fields(self):
         """_from_dict parses db, workers and llm."""
         data = {
-            "db": {"path": "~/mydb.sqlite"},
+            "db": {"path": "~/mydb.sqlite", "auto_sync": True},
             "workers": 8,
             "llm": {
                 "enabled": True,
@@ -167,6 +173,7 @@ class TestFilekorConfigFromDict:
         config = FilekorConfig._from_dict(data)
 
         assert config.db_path == Path("~/mydb.sqlite").expanduser().resolve()
+        assert config.auto_sync is True
         assert config.workers == 8
         assert config.llm.enabled is True
         assert config.llm.provider == "openai"
@@ -179,6 +186,7 @@ class TestFilekorConfigFromDict:
 
         assert config.db_path == DEFAULT_DB_PATH
         assert config.workers == 4
+        assert config.auto_sync is False
         assert config.llm.enabled is False
 
     def test_from_dict_partial_llm(self):
@@ -192,12 +200,13 @@ class TestFilekorConfigFromDict:
 class TestFilekorConfigRepr:
     def test_repr(self):
         """__repr__ includes db_path, workers and llm_enabled."""
-        config = FilekorConfig(db_path="/tmp/db", workers=2, llm={"enabled": True})
+        config = FilekorConfig(db_path="/tmp/db", workers=2, llm={"enabled": True}, auto_sync=True)
         r = repr(config)
 
         assert "FilekorConfig(" in r
         assert "db_path=" in r
         assert "workers=2" in r
+        assert "auto_sync=True" in r
         assert "llm_enabled=True" in r
 
     def test_repr_defaults(self):

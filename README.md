@@ -29,6 +29,9 @@ filekor sidecar documento.pdf
 filekor sidecar ./documentos --dir           # Process directory (generates merged.kor by default)
 filekor sidecar ./documentos --dir --no-merge # Generate individual .kor files
 filekor sidecar ./documentos --dir --db     # Use database to regenerate when available
+filekor sidecar ./documentos --dir --labels # Add labels via LLM
+filekor sidecar ./documentos --dir --summary   # Add summaries via LLM (short + long)
+filekor sidecar ./documentos --dir --summary=short # Add only short summary
 filekor labels documento.pdf
 filekor summary documento.pdf         # Generate summaries with LLM
 filekor sync documento.kor          # Sync existing .kor to database

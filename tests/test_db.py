@@ -166,10 +166,12 @@ class TestSyncFile:
         """Verify sync_file inserts a new file record."""
         db = temp_db
 
-        file_id = db.sync_file(str(sample_kor_file))
+        file_ids = db.sync_file(str(sample_kor_file))
 
-        assert file_id is not None
-        assert isinstance(file_id, int)
+        assert file_ids is not None
+        assert isinstance(file_ids, list)
+        assert len(file_ids) == 1
+        assert isinstance(file_ids[0], int)
 
         # Verify record exists
         with db._get_connection() as conn:
@@ -181,7 +183,7 @@ class TestSyncFile:
         db = temp_db
 
         # First sync
-        file_id1 = db.sync_file(str(sample_kor_file))
+        file_ids1 = db.sync_file(str(sample_kor_file))
 
         # Modify the sidecar file
         sidecar = Sidecar.load(str(sample_kor_file))
@@ -189,10 +191,10 @@ class TestSyncFile:
         sample_kor_file.write_text(sidecar.to_yaml())
 
         # Second sync should update
-        file_id2 = db.sync_file(str(sample_kor_file))
+        file_ids2 = db.sync_file(str(sample_kor_file))
 
-        # Note: SQLite INSERT OR REPLACE creates a new rowid, so IDs may differ
-        # The important thing is that there's still only one file record
+        # With hash_sha256 as unique key, the same file keeps the same ID
+        assert file_ids1 == file_ids2
 
         # Verify there's only one file record
         with db._get_connection() as conn:
@@ -213,7 +215,7 @@ class TestSyncFile:
         """Verify sync_file correctly extracts file information."""
         db = temp_db
 
-        file_id = db.sync_file(str(sample_kor_file))
+        file_ids = db.sync_file(str(sample_kor_file))
 
         # Verify file info
         db_file = db.get_file_by_path(str(sample_kor_file.with_suffix(".pdf")))
@@ -242,10 +244,10 @@ class TestSyncFile:
         kor_file.write_text(sidecar.to_yaml())
 
         db = temp_db
-        file_id = db.sync_file(str(kor_file))
+        file_ids = db.sync_file(str(kor_file))
 
         # Should succeed with no labels
-        labels = db.get_labels_for_file(file_id)
+        labels = db.get_labels_for_file(file_ids[0])
         assert len(labels) == 0
 
     def test_sync_file_is_atomic(self, temp_db, sample_kor_file):
@@ -254,19 +256,55 @@ class TestSyncFile:
 
         # This is implicitly tested by the fact that operations succeed
         # A true atomic test would require simulating failures mid-transaction
-        file_id = db.sync_file(str(sample_kor_file))
+        file_ids = db.sync_file(str(sample_kor_file))
 
         # Both file and labels should exist
         with db._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT COUNT(*) as count FROM files WHERE id = ?", (file_id,)
+                "SELECT COUNT(*) as count FROM files WHERE id = ?", (file_ids[0],)
             )
             assert cursor.fetchone()["count"] == 1
 
             cursor = conn.execute(
-                "SELECT COUNT(*) as count FROM labels WHERE file_id = ?", (file_id,)
+                "SELECT COUNT(*) as count FROM labels WHERE file_id = ?", (file_ids[0],)
             )
             assert cursor.fetchone()["count"] == 2  # finance and contract
+
+    def test_sync_file_merged_kor_multi_document(self, temp_db, tmp_path):
+        """Verify sync_file indexes all documents from a merged.kor file."""
+        db = temp_db
+
+        # Create two source files
+        source1 = tmp_path / "doc1.txt"
+        source1.write_text("Content one")
+        source2 = tmp_path / "doc2.txt"
+        source2.write_text("Content two")
+
+        # Create sidecars
+        sidecar1 = Sidecar.create(str(source1))
+        sidecar1.update_labels(["label_a"])
+        sidecar2 = Sidecar.create(str(source2))
+        sidecar2.update_labels(["label_b"])
+
+        # Write merged.kor (multi-document YAML)
+        merged_kor = tmp_path / "merged.kor"
+        merged_kor.write_text("---\n" + sidecar1.to_yaml() + "\n---\n" + sidecar2.to_yaml() + "\n")
+
+        # Sync merged.kor
+        file_ids = db.sync_file(str(merged_kor))
+
+        assert len(file_ids) == 2
+
+        # Verify both files are in the database
+        with db._get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) as count FROM files")
+            assert cursor.fetchone()["count"] == 2
+
+        # Verify labels for each file
+        labels_a = db.query_by_label("label_a")
+        labels_b = db.query_by_label("label_b")
+        assert len(labels_a) == 1
+        assert len(labels_b) == 1
 
 
 class TestQueryByLabel:
@@ -395,9 +433,11 @@ class TestConvenienceFunctions:
 
             # Use convenience function with custom path
             db = get_db(db_path)
-            file_id = sync_file(str(kor_file), db)
+            file_ids = sync_file(str(kor_file), db)
 
-            assert file_id is not None
+            assert file_ids is not None
+            assert isinstance(file_ids, list)
+            assert len(file_ids) == 1
         finally:
             close_db()
             Database._instance = None
@@ -467,8 +507,8 @@ class TestDatabaseLifecycle:
         try:
             with db._get_connection() as conn:
                 conn.execute(
-                    "INSERT INTO files (kor_path, file_path, name) VALUES (?, ?, ?)",
-                    ("test", "test", "test"),
+                    "INSERT INTO files (kor_path, file_path, name, hash_sha256) VALUES (?, ?, ?, ?)",
+                    ("test", "test", "test", "abc123"),
                 )
                 raise ValueError("Test error")
         except ValueError:
@@ -486,7 +526,6 @@ class TestCLISyncIntegration:
     def test_auto_sync_enabled_creates_db_entry(self, tmp_path):
         """Verify CLI auto-syncs when auto_sync is enabled."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.core.labels import LLMConfig
 
         # Reset singleton
         Database._instance = None
@@ -501,15 +540,12 @@ class TestCLISyncIntegration:
             sidecar.update_labels(["auto_sync_test_label"])
             kor_file.write_text(sidecar.to_yaml())
 
-            # Create config with auto_sync enabled
-            llm_config = LLMConfig(auto_sync=True)
-
             # Use the auto-sync hook directly with our database
             db_path = tmp_path / "test.db"
             db = get_db(db_path)
 
-            # Call the hook
-            _auto_sync_hook(kor_file, llm_config, verbose=False)
+            # Call the hook with auto_sync=True
+            _auto_sync_hook(kor_file, auto_sync=True, verbose=False)
 
             # Verify database entry was created
             results = query_by_label("auto_sync_test_label", db)
@@ -523,16 +559,14 @@ class TestCLISyncIntegration:
     def test_auto_sync_disabled_skips_db(self, tmp_path):
         """Verify CLI skips DB sync when auto_sync is disabled."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.core.labels import LLMConfig
 
         # Reset singleton
         Database._instance = None
 
-        llm_config = LLMConfig(auto_sync=False)
         kor_path = tmp_path / "test.kor"
 
         # Should not raise and should not sync
-        _auto_sync_hook(kor_path, llm_config, verbose=False)
+        _auto_sync_hook(kor_path, auto_sync=False, verbose=False)
 
         # If we got here without error, test passes
         assert True
@@ -540,13 +574,11 @@ class TestCLISyncIntegration:
     def test_auto_sync_error_does_not_fail_cli(self, tmp_path):
         """Verify CLI continues even if DB sync fails."""
         from filekor.cli.sidecar import _auto_sync_hook
-        from filekor.core.labels import LLMConfig
 
-        llm_config = LLMConfig(auto_sync=True)
         kor_path = tmp_path / "nonexistent.kor"
 
         # Should not raise even though file doesn't exist
-        _auto_sync_hook(kor_path, llm_config, verbose=False)
+        _auto_sync_hook(kor_path, auto_sync=True, verbose=False)
 
         # If we got here without error, test passes
         assert True
@@ -585,15 +617,15 @@ class TestDelete:
         """Verify delete cascades to labels."""
         db = temp_db
 
-        file_id = db.sync_file(str(sample_kor_file))
+        file_ids = db.sync_file(str(sample_kor_file))
 
         # Verify labels exist
-        labels = db.get_labels_for_file(file_id)
+        labels = db.get_labels_for_file(file_ids[0])
         assert len(labels) == 2
 
         # Delete file
         db.delete_file(str(sample_kor_file.with_suffix(".pdf")))
 
         # Labels should be gone (due to CASCADE)
-        labels = db.get_labels_for_file(file_id)
+        labels = db.get_labels_for_file(file_ids[0])
         assert len(labels) == 0

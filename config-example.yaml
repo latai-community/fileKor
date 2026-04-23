@@ -1,11 +1,11 @@
 filekor:
   db:
     path: ~/.filekor/index.db
+    auto_sync: true
   llm:
     enabled: true
     provider: PROVIDER_NAME_HERE
     api_key: API_KEY_HERE
-    auto_sync: true
     model: MODEL_NAME_HERE
     max_content_chars: 1500
   workers: 4

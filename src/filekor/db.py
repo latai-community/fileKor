@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path.home() / FILEKOR_DIR / "index.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # SQL Schema definitions
 SCHEMA_SQL = """
@@ -39,13 +39,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kor_path TEXT UNIQUE NOT NULL,
+    kor_path TEXT NOT NULL,
     file_path TEXT NOT NULL,
     name TEXT NOT NULL,
     extension TEXT,
     size_bytes INTEGER,
     modified_at TIMESTAMP,
-    hash_sha256 TEXT,
+    hash_sha256 TEXT UNIQUE NOT NULL,
     metadata_json TEXT,
     summary_short TEXT,
     summary_long TEXT,
@@ -267,6 +267,86 @@ class Database:
                     (2,),
                 )
 
+            if current_version < 3:
+                # Migration v3: Change unique constraint from kor_path to hash_sha256
+                # and enable multi-document .kor (merged.kor) support
+                try:
+                    conn.executescript("""
+                        DROP TRIGGER IF EXISTS files_ai;
+                        DROP TRIGGER IF EXISTS files_ad;
+                        DROP TRIGGER IF EXISTS files_au;
+
+                        CREATE TABLE files_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            kor_path TEXT NOT NULL,
+                            file_path TEXT NOT NULL,
+                            name TEXT NOT NULL,
+                            extension TEXT,
+                            size_bytes INTEGER,
+                            modified_at TIMESTAMP,
+                            hash_sha256 TEXT UNIQUE NOT NULL,
+                            metadata_json TEXT,
+                            summary_short TEXT,
+                            summary_long TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        );
+
+                        INSERT INTO files_new (
+                            id, kor_path, file_path, name, extension, size_bytes,
+                            modified_at, hash_sha256, metadata_json, summary_short,
+                            summary_long, created_at, updated_at
+                        )
+                        SELECT
+                            id, kor_path, file_path, name, extension, size_bytes,
+                            modified_at, COALESCE(hash_sha256, ''), metadata_json,
+                            summary_short, summary_long, created_at, updated_at
+                        FROM files;
+
+                        DROP TABLE files;
+                        ALTER TABLE files_new RENAME TO files;
+
+                        CREATE INDEX idx_files_path ON files(file_path);
+
+                        DROP TABLE IF EXISTS files_fts;
+                        CREATE VIRTUAL TABLE files_fts USING fts5(
+                            name,
+                            metadata_json,
+                            summary_short,
+                            summary_long,
+                            content='files',
+                            content_rowid='id',
+                            tokenize='porter unicode61'
+                        );
+
+                        INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                        SELECT id, name, metadata_json, summary_short, summary_long FROM files;
+
+                        CREATE TRIGGER files_ai AFTER INSERT ON files BEGIN
+                            INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
+                        END;
+
+                        CREATE TRIGGER files_ad AFTER DELETE ON files BEGIN
+                            INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
+                        END;
+
+                        CREATE TRIGGER files_au AFTER UPDATE ON files BEGIN
+                            INSERT INTO files_fts(files_fts, rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES ('delete', old.id, old.name, old.metadata_json, old.summary_short, old.summary_long);
+                            INSERT INTO files_fts(rowid, name, metadata_json, summary_short, summary_long)
+                            VALUES (new.id, new.name, new.metadata_json, new.summary_short, new.summary_long);
+                        END;
+                    """)
+                except Exception:
+                    pass
+
+                conn.execute(
+                    "INSERT OR REPLACE INTO schema_version (version) VALUES (?)",
+                    (3,),
+                )
+
             conn.commit()
 
     @contextmanager
@@ -320,105 +400,118 @@ class Database:
         """
         self.close()
 
-    def sync_file(self, kor_path: str) -> int:
+    def sync_file(self, kor_path: str) -> List[int]:
         """Synchronize a .kor file into the database.
 
-        This performs an atomic upsert operation:
-        1. Parse the .kor file
-        2. Insert or update the file record
-        3. Delete old labels for this file
-        4. Insert new labels
+        Supports both single-document .kor files and multi-document
+        merged.kor files. Each document is upserted individually using
+        hash_sha256 as the unique key.
 
         Args:
             kor_path: Path to the .kor sidecar file.
 
         Returns:
-            file_id: The ID of the inserted/updated file record.
+            List of file IDs for each inserted/updated file record.
 
         Raises:
             FileNotFoundError: If the .kor file doesn't exist.
             ValueError: If the .kor file is invalid.
             sqlite3.Error: If database operation fails.
         """
+        import yaml
         from filekor.sidecar import Sidecar
 
         kor_file = Path(kor_path)
         if not kor_file.exists():
             raise FileNotFoundError(f"Sidecar file not found: {kor_path}")
 
-        # Parse the .kor file
-        sidecar = Sidecar.load(kor_path)
+        # Parse the .kor file (supports multi-document merged.kor)
+        content = kor_file.read_text(encoding="utf-8")
 
         with self._get_connection() as conn:
             try:
-                # Begin transaction
                 conn.execute("BEGIN")
 
-                # Prepare metadata JSON
-                metadata_dict = {}
-                if sidecar.metadata:
-                    metadata_dict = {
-                        "author": sidecar.metadata.author,
-                        "created": sidecar.metadata.created.isoformat()
-                        if sidecar.metadata.created
-                        else None,
-                        "pages": sidecar.metadata.pages,
-                    }
+                file_ids: List[int] = []
 
-                # Insert or replace file record
-                cursor = conn.execute(
-                    """
-                    INSERT OR REPLACE INTO files 
-                    (kor_path, file_path, name, extension, size_bytes, modified_at, hash_sha256, metadata_json, summary_short, summary_long, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        str(kor_file.resolve()),
-                        sidecar.file.path,
-                        sidecar.file.name,
-                        sidecar.file.extension,
-                        sidecar.file.size_bytes,
-                        sidecar.file.modified_at,
-                        sidecar.file.hash_sha256,
-                        json.dumps(metadata_dict) if metadata_dict else None,
-                        sidecar.summary.short if sidecar.summary else None,
-                        sidecar.summary.long if sidecar.summary else None,
-                        datetime.now(timezone.utc),
-                    ),
-                )
+                for data in yaml.safe_load_all(content):
+                    if not data:
+                        continue
 
-                # Get the file_id
-                file_id = cursor.lastrowid
+                    sidecar = Sidecar.from_dict(data)
 
-                # If it was an UPDATE, lastrowid might be None, so query for it
-                if file_id is None:
+                    # Prepare metadata JSON
+                    metadata_dict = {}
+                    if sidecar.metadata:
+                        metadata_dict = {
+                            "author": sidecar.metadata.author,
+                            "created": sidecar.metadata.created.isoformat()
+                            if sidecar.metadata.created
+                            else None,
+                            "pages": sidecar.metadata.pages,
+                        }
+
+                    # Upsert using hash_sha256 as conflict target
                     cursor = conn.execute(
-                        "SELECT id FROM files WHERE kor_path = ?",
-                        (str(kor_file.resolve()),),
+                        """
+                        INSERT INTO files
+                        (kor_path, file_path, name, extension, size_bytes, modified_at, hash_sha256, metadata_json, summary_short, summary_long, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(hash_sha256) DO UPDATE SET
+                            kor_path = excluded.kor_path,
+                            file_path = excluded.file_path,
+                            name = excluded.name,
+                            extension = excluded.extension,
+                            size_bytes = excluded.size_bytes,
+                            modified_at = excluded.modified_at,
+                            metadata_json = excluded.metadata_json,
+                            summary_short = excluded.summary_short,
+                            summary_long = excluded.summary_long,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            str(kor_file.resolve()),
+                            sidecar.file.path,
+                            sidecar.file.name,
+                            sidecar.file.extension,
+                            sidecar.file.size_bytes,
+                            sidecar.file.modified_at,
+                            sidecar.file.hash_sha256,
+                            json.dumps(metadata_dict) if metadata_dict else None,
+                            sidecar.summary.short if sidecar.summary else None,
+                            sidecar.summary.long if sidecar.summary else None,
+                            datetime.now(timezone.utc),
+                        ),
+                    )
+
+                    # Always query for the file_id after upsert - lastrowid
+                    # is unreliable with ON CONFLICT DO UPDATE
+                    cursor = conn.execute(
+                        "SELECT id FROM files WHERE hash_sha256 = ?",
+                        (sidecar.file.hash_sha256,),
                     )
                     row = cursor.fetchone()
-                    if row:
-                        file_id = row["id"]
+                    file_id = row["id"] if row else None
 
-                # Delete old labels for this file
-                conn.execute("DELETE FROM labels WHERE file_id = ?", (file_id,))
+                    # Delete old labels and insert new ones
+                    conn.execute("DELETE FROM labels WHERE file_id = ?", (file_id,))
 
-                # Insert new labels
-                if sidecar.labels and sidecar.labels.suggested:
-                    for label in sidecar.labels.suggested:
-                        conn.execute(
-                            """
-                            INSERT INTO labels (file_id, label, confidence, source)
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (file_id, label, None, sidecar.labels.source),
-                        )
+                    if sidecar.labels and sidecar.labels.suggested:
+                        for label in sidecar.labels.suggested:
+                            conn.execute(
+                                """
+                                INSERT INTO labels (file_id, label, confidence, source)
+                                VALUES (?, ?, ?, ?)
+                                """,
+                                (file_id, label, None, sidecar.labels.source),
+                            )
 
-                # Commit transaction
+                    file_ids.append(file_id)
+
                 conn.commit()
 
-                logger.debug(f"Synced file {kor_path} with ID {file_id}")
-                return file_id
+                logger.debug(f"Synced file {kor_path} with IDs {file_ids}")
+                return file_ids
 
             except Exception:
                 conn.rollback()
@@ -829,7 +922,7 @@ def get_db(path: Optional[Path] = None) -> Database:
     return _db_instance
 
 
-def sync_file(kor_path: str, db: Optional[Database] = None) -> int:
+def sync_file(kor_path: str, db: Optional[Database] = None) -> List[int]:
     """Convenience function to sync a .kor file to the database.
 
     Args:
@@ -837,7 +930,7 @@ def sync_file(kor_path: str, db: Optional[Database] = None) -> int:
         db: Optional Database instance (uses singleton if not provided).
 
     Returns:
-        file_id: The ID of the inserted/updated file record.
+        List of file IDs for each inserted/updated file record.
 
     Example:
         >>> from filekor.db import sync_file

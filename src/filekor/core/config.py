@@ -60,12 +60,14 @@ class FilekorConfig:
 
     db_path: Path
     workers: int
+    auto_sync: bool
     llm: LLMConfig
 
     def __init__(
         self,
         db_path: Optional[Union[str, Path]] = None,
         workers: int = 4,
+        auto_sync: bool = False,
         llm: Optional[Union[LLMConfig, Dict[str, Any]]] = None,
     ):
         """Initialize FilekorConfig.
@@ -74,6 +76,7 @@ class FilekorConfig:
             db_path: Path to SQLite database file. Supports ~ and relative paths.
                      Default: ~/.filekor/index.db
             workers: Number of parallel workers for directory operations. Default: 4
+            auto_sync: Auto-sync .kor files to database after generation. Default: False
             llm: LLM configuration. Can be:
                  - An LLMConfig instance
                  - A dict with LLM settings (enabled, provider, model, api_key, etc.)
@@ -85,6 +88,7 @@ class FilekorConfig:
             self.db_path = Path(db_path).expanduser().resolve()
 
         self.workers = workers
+        self.auto_sync = auto_sync
 
         if isinstance(llm, LLMConfig):
             self.llm = llm
@@ -100,7 +104,6 @@ class FilekorConfig:
                 api_key=api_key,
                 max_content_chars=llm.get("max_content_chars", 1500),
                 workers=workers,
-                auto_sync=llm.get("auto_sync", False),
             )
         else:
             self.llm = LLMConfig(workers=workers)
@@ -155,21 +158,23 @@ class FilekorConfig:
         Returns:
             FilekorConfig instance.
         """
-        # DB path
+        # DB path and auto_sync
         db_data = data.get(CONFIG_DB_KEY, {})
         db_path = db_data.get("path")
         if db_path:
             db_path = Path(db_path).expanduser().resolve()
+        auto_sync = db_data.get("auto_sync", False)
 
         # Workers
         workers = data.get(CONFIG_WORKERS_KEY, 4)
 
-        # LLM (pass raw dict, let __init__ handle env vars)
-        llm_data = data.get(CONFIG_LLM_KEY, {})
+        # LLM (shallow copy so we don't mutate the original dict)
+        llm_data = dict(data.get(CONFIG_LLM_KEY, {}))
 
         return cls(
             db_path=db_path,
             workers=workers,
+            auto_sync=auto_sync,
             llm=llm_data,
         )
 
@@ -177,5 +182,6 @@ class FilekorConfig:
         return (
             f"FilekorConfig(db_path={self.db_path}, "
             f"workers={self.workers}, "
+            f"auto_sync={self.auto_sync}, "
             f"llm_enabled={self.llm.enabled})"
         )

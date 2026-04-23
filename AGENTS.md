@@ -66,11 +66,19 @@ src/filekor/
 
 - Generated in `.filekor/` subdirectory next to the source file (NOT alongside it).
 - Single file → `merged.kor` by default. Use `--no-merge` for individual `.kor` files.
+- `--labels`: Generate labels via LLM.
+- `--summary`: Generate summaries via LLM (both by default, or `--summary=short`/`--summary=long`).
 - YAML format with fields: version, file, metadata, content, summary, labels, parser_status, generated_at.
 
 ## Magic strings
 
 **All magic strings live in `src/filekor/constants.py`**. When adding new literals that appear in multiple places (file extensions, config keys, DB column names, etc.), define them there and import. See the file for existing constants.
+
+## Documentation
+
+After modifying CLI commands or core behavior, update the corresponding documentation:
+- `docs/usage.md` — CLI usage and examples
+- `docs/library.md` — Python library API
 
 ## Testing — critical rules
 

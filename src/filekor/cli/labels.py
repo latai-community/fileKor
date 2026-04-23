@@ -9,6 +9,7 @@ import click
 
 from filekor.cli.base import console, extract_text
 from filekor.constants import FILEKOR_DIR, KOR_EXTENSION
+from filekor.core.config import FilekorConfig
 from filekor.core.labels import LabelsConfig, LLMConfig, suggest_labels
 from filekor.core.processor import SUPPORTED_EXTENSIONS
 from filekor.sidecar import Sidecar
@@ -89,6 +90,9 @@ def _labels_file(
     llm_config_obj = (
         LLMConfig.load(llm_config_path) if llm_config_path else LLMConfig.load()
     )
+    filekor_config = (
+        FilekorConfig.load(llm_config_path) if llm_config_path else FilekorConfig.load()
+    )
     if not llm_config_obj.enabled or not llm_config_obj.api_key:
         console.print(
             "[red]Error: LLM is not configured. Please enable LLM in config.yaml "
@@ -142,13 +146,13 @@ def _labels_file(
 
     kor_path.write_text(sidecar_file.to_yaml())
 
-    _auto_sync_hook(kor_path, llm_config_obj)
+    _auto_sync_hook(kor_path, filekor_config.auto_sync)
     console.print(f"[bold green]Saved: {kor_path}[/bold green]")
 
 
-def _auto_sync_hook(kor_path: Path, llm_config: LLMConfig) -> None:
+def _auto_sync_hook(kor_path: Path, auto_sync: bool) -> None:
     """Auto-sync sidecar to database if enabled."""
-    if not llm_config.auto_sync:
+    if not auto_sync:
         return
 
     try:
@@ -174,6 +178,9 @@ def _labels_directory(
 
     llm_config_obj = (
         LLMConfig.load(llm_config_path) if llm_config_path else LLMConfig.load()
+    )
+    filekor_config = (
+        FilekorConfig.load(llm_config_path) if llm_config_path else FilekorConfig.load()
     )
     if not llm_config_obj.enabled or not llm_config_obj.api_key:
         console.print(
@@ -232,7 +239,7 @@ def _labels_directory(
             sidecar.update_labels(suggestions)
 
             kor_path.write_text(sidecar.to_yaml())
-            _auto_sync_hook(kor_path, llm_config_obj)
+            _auto_sync_hook(kor_path, filekor_config.auto_sync)
 
             return (file_path, True, suggestions, None)
         except Exception as e:

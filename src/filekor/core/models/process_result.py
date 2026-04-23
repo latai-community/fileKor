@@ -18,6 +18,7 @@ class ProcessResult:
         output_path: Path to the output .kor file (optional).
         error: Error message if processing failed (optional).
         labels: List of labels extracted (optional).
+        sidecar: Generated Sidecar object (optional, used when write_kor=False).
     """
 
     file_path: Path
@@ -25,3 +26,4 @@ class ProcessResult:
     output_path: Optional[Path] = None
     error: Optional[str] = None
     labels: Optional[List[str]] = None
+    sidecar: Optional[object] = None

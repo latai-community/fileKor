@@ -168,7 +168,7 @@ class TestProcessFile:
         with patch(
             "filekor.core.processor.PyExifToolAdapter", return_value=mock_adapter
         ):
-            proc = DirectoryProcessor(llm_config=llm, labels_config=labels_cfg)
+            proc = DirectoryProcessor(llm_config=llm, labels_config=labels_cfg, add_labels=True)
 
         with (
             patch("filekor.cli.extract_text", return_value=("hello", 2, None)),

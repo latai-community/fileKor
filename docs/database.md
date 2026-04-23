@@ -149,7 +149,7 @@ from filekor.db import (
 db = get_db()
 
 # Manually sync a .kor file
-sync_file("./documento.kor")
+file_ids = sync_file("./documento.kor")
 
 # Query files by label
 files = query_by_label("finance")
