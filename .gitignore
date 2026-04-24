@@ -215,5 +215,5 @@ specs/
 *.kor
 .atl
 config.yaml
-*/.filekor/
+.filekor/
 .DS_Store

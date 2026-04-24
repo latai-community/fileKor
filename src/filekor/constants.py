@@ -76,6 +76,7 @@ FORMAT_TEXT = "text"
 FORMAT_JSON = "json"
 FORMAT_CSV = "csv"
 FORMAT_SHA = "sha"
+FORMAT_SEPARATED = "separated"
 
 
 class OutputFormat(Enum):
@@ -85,6 +86,7 @@ class OutputFormat(Enum):
     JSON = FORMAT_JSON
     CSV = FORMAT_CSV
     SHA = FORMAT_SHA
+    SEPARATED = FORMAT_SEPARATED
 
 
 # ─── LLM providers ──────────────────────────────────────────────────

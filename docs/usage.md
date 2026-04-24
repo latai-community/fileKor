@@ -55,23 +55,60 @@ source .venv/bin/activate
 Extract text content from PDF, TXT, or MD files.
 
 ```bash
+# Single file (stdout)
 filekor extract <path>
 
-# Extract to file
+# Single file to output
 filekor extract <path> -o <output>
 
-# Process directory recursively
+# Directory (separated format, default - clean output for pipes)
 filekor extract ./documentos/ --dir
 
-# Show help
-filekor extract --help
+# Directory with verbose (show progress and headers)
+filekor extract ./documentos/ --dir --verbose
+
+# Directory with format
+filekor extract ./documentos/ --dir --format json
+filekor extract ./documentos/ --dir --format separated
+
+# Directory to files
+filekor extract ./documentos/ --dir -o ./output/
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-o`, `--output` | Output file path |
+| `-o`, `--output` | Output file (single) or directory (directory mode) |
 | `-d`, `--dir` | Process directory instead of single file |
+| `-v`, `--verbose` | Show progress logs and file headers |
+| `-f`, `--format` | Output format: `separated` (default), `json` |
+
+**Behavior:**
+- Default (`--dir`): outputs clean content — no logs, no headers (pipe friendly)
+- With `--verbose` or `-v`: shows progress logs and `>>> FILE:` headers
+- With `-o`: saves `.txt` files, ignores `--format`
+
+**Formats:**
+| Format | Description | Use Case |
+|--------|-------------|----------|
+| `separated` | Raw content (without headers) | Concatenate all files, pipe to other tools |
+| `json` | NDJSON (one JSON object per line) | Programmatic parsing with `jq` |
+
+**Examples:**
+
+```bash
+# Clean output for pipes (default)
+filekor extract ./docs/ --dir
+
+# Verbose mode (show progress and headers)
+filekor extract ./docs/ --dir --verbose
+
+# Parse with jq (filter by word count)
+filekor extract ./docs/ --dir --format json | jq 'select(.words > 100)'
+
+# Save individual .txt files
+filekor extract ./docs/ --dir -o ./extracted/
+```
 
 ---
 
