@@ -119,6 +119,15 @@ from filekor.core.config import FilekorConfig
 from filekor.core.processor import process_directory
 ```
 
+## Logging and user output
+
+- **NEVER use `logging`** for messages visible to the user — logging is designed for debugging/monitoring and is invisible by default.
+- **ALWAYS use `console.print()` (Rich)** with colors for user-facing output:
+  - `[green]` for success (e.g., `console.print("[green]OK[/green] file.txt")`)
+  - `[red]` for fatal errors (e.g., `console.print("[red]Error: File not found[/red]")`)
+  - `[yellow]` for non-fatal warnings (e.g., `console.print("[yellow]Warning: Auto-sync failed: {e}[/yellow]")`)
+- This is consistent with the rest of the codebase (`cli/sidecar.py:162` uses exactly this pattern for DB sync warnings).
+
 ## External dependencies
 
 - **exiftool** — required for metadata extraction. Tests that need it mock `PyExifToolAdapter.is_available`.

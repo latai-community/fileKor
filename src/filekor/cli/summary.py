@@ -321,5 +321,5 @@ def _auto_sync_hook(kor_path: Path, auto_sync: bool) -> None:
         from filekor.db import sync_file
 
         sync_file(str(kor_path))
-    except Exception:
-        pass
+    except Exception as e:
+        console.print(f"[yellow]Warning: Auto-sync failed for {kor_path.name}: {e}[/yellow]")
