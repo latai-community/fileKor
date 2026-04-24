@@ -219,21 +219,25 @@ class TestExtractDirectoryFormats:
 
     @patch("filekor.cli.HAS_PYPDF", False)
     def test_extract_directory_format_with_output_ignores_format(self, tmp_path):
-        """When -o is specified, --format is ignored (files are saved)."""
+        """When -o is specified, files are saved with --format extension."""
         (tmp_path / "a.txt").write_text("aaa")
         output_dir = tmp_path / "out"
 
         runner = CliRunner()
         with patch("filekor.cli.extract.extract_text") as mock_extract:
             mock_extract.return_value = ("extracted", 1, 1)
-            result = runner.invoke(
-                extract,
-                [str(tmp_path), "--dir", "-o", str(output_dir), "--format", "json"],
-            )
+            with patch("filekor.cli.extract.calculate_sha256") as mock_sha:
+                mock_sha.return_value = "sha256hash0000000000"
+                result = runner.invoke(
+                    extract,
+                    [str(tmp_path), "--dir", "-o", str(output_dir), "--format", "json"],
+                )
 
         assert result.exit_code == 0
-        assert (output_dir / "a.txt").exists()
-        assert (output_dir / "a.txt").read_text(encoding="utf-8") == "extracted"
+        assert (output_dir / "a.json").exists()
+        content = (output_dir / "a.json").read_text(encoding="utf-8")
+        assert '"file": "a.txt"' in content
+        assert '"success": true' in content
         assert "{" not in result.output
 
     @patch("filekor.cli.HAS_PYPDF", False)
@@ -298,3 +302,43 @@ class TestExtractDirectoryFormats:
         assert "subdir" in result.output
         assert "doc.txt" in result.output
         assert "<<< END:" in result.output
+
+    @patch("filekor.cli.HAS_PYPDF", False)
+    def test_extract_directory_subdirectory_structure_preserved(self, tmp_path):
+        """Output with -o preserves subdirectory structure."""
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        (subdir / "doc.txt").write_text("content")
+        output_dir = tmp_path / "out"
+
+        runner = CliRunner()
+        with patch("filekor.cli.extract.extract_text") as mock_extract:
+            mock_extract.return_value = ("content", 1, 1)
+            result = runner.invoke(
+                extract, [str(tmp_path), "--dir", "-o", str(output_dir)]
+            )
+
+        assert result.exit_code == 0
+        assert (output_dir / "subdir" / "doc.txt").exists()
+        assert (output_dir / "subdir" / "doc.txt").read_text(encoding="utf-8") == "content"
+
+    @patch("filekor.cli.HAS_PYPDF", False)
+    def test_extract_directory_json_format_output(self, tmp_path):
+        """Output with --format json saves .json files."""
+        (tmp_path / "a.txt").write_text("aaa")
+        output_dir = tmp_path / "out"
+
+        runner = CliRunner()
+        with patch("filekor.cli.extract.extract_text") as mock_extract:
+            mock_extract.return_value = ("content", 1, 1)
+            with patch("filekor.cli.extract.calculate_sha256") as mock_sha:
+                mock_sha.return_value = "sha256hash0000000000"
+                result = runner.invoke(
+                    extract, [str(tmp_path), "--dir", "-o", str(output_dir), "--format", "json"]
+                )
+
+        assert result.exit_code == 0
+        assert (output_dir / "a.json").exists()
+        content = (output_dir / "a.json").read_text(encoding="utf-8")
+        assert '"file": "a.txt"' in content
+        assert '"success": true' in content

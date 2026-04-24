@@ -124,9 +124,28 @@ def _extract_directory(directory: str, output: Optional[str], verbose: bool, out
             sha256 = calculate_sha256(str(file_path))
 
             if output:
-                out_file = Path(output) / f"{file_path.stem}.txt"
+                relative_path = file_path.relative_to(dir_path)
+                out_file = Path(output) / relative_path
+
+                if output_format == FORMAT_JSON:
+                    out_file = out_file.with_suffix(".json")
+                else:
+                    out_file = out_file.with_suffix(".txt")
+
                 out_file.parent.mkdir(parents=True, exist_ok=True)
-                out_file.write_text(content, encoding="utf-8")
+
+                if output_format == FORMAT_JSON:
+                    obj = {
+                        "file": str(relative_path),
+                        "sha256": sha256,
+                        "content": content,
+                        "words": word_count,
+                        "pages": page_count,
+                        "success": True,
+                    }
+                    out_file.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                else:
+                    out_file.write_text(content, encoding="utf-8")
             else:
                 _output_content(
                     file_path, content, word_count, page_count, sha256, output_format, directory,
