@@ -250,23 +250,25 @@ filekor summary ./documentos/ --dir --watch
 
 ## Status
 
-Show status of .kor files for a file or directory.
+Show status of .kor files for a file or directory. Uses database as primary source when indexed.
 
 ```bash
+# Show status for file
 filekor status <path>
 
 # Show status for directory
 filekor status ./documentos/ --dir
-
-# Watch mode for real-time updates
-filekor status ./documentos/ --dir --watch
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
 | `-d`, `--dir` | Show status for directory instead of single file |
-| `--watch` | Enable watch mode for real-time updates |
+
+**Output indicators:**
+- `[green]OK[/green]` - .kor file exists in filesystem
+- `[DB only]` - File indexed in database (no individual .kor file)
+- `[DB+FS]` - File in both database and filesystem
 
 ---
 
@@ -342,8 +344,9 @@ filekor sidecar ./documentos/ --dir --labels --summary
 # Add labels to all files
 filekor labels ./documentos/ --dir
 
-# Check status of processed files
+# Check status of processed files (works with merged.kor or indexed in DB)
 filekor status ./documentos/ --dir
+filekor status ./documentos/ --dir --verbose
 ```
 
 ---

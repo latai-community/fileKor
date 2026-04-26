@@ -1,4 +1,4 @@
-"""Tests for core/status.py — get_file_status, get_directory_status, summarize."""
+"""Tests for core/status.py — get_file_status, get_directory_status, file_status_to_dict."""
 
 import os
 from datetime import datetime, timezone
@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from filekor.core.models.file_status import FileStatus, DirectoryStatus
-from filekor.core.status import get_file_status, get_directory_status, summarize
+from filekor.core.status import get_file_status, get_directory_status, file_status_to_dict
 from filekor.sidecar import Content, FileInfo, FileLabels, FileMetadata, Sidecar
 
 
@@ -195,39 +195,39 @@ class TestGetDirectoryStatus:
         assert len(status.files_without_kor) == 0
 
 
-# ─── summarize ──────────────────────────────────────────────────────
+# ─── file_status_to_dict ──────────────────────────────────────────────────
 
 
-class TestSummarize:
-    def test_summarize_no_kor(self, tmp_path):
-        """Summarize a file status where .kor does not exist."""
+class TestFileStatusToDict:
+    def test_file_status_to_dict_no_kor(self, tmp_path):
+        """Convert a file status where .kor does not exist."""
         fs = FileStatus(
             file_path=tmp_path / "x.txt",
             kor_path=tmp_path / ".filekor" / "x.txt.kor",
             exists=False,
         )
-        result = summarize(fs)
+        result = file_status_to_dict(fs)
 
         assert result["kor_exists"] is False
         assert "file" in result
         assert "name" not in result
 
-    def test_summarize_with_error(self, tmp_path):
-        """Summarize when kor exists but has an error."""
+    def test_file_status_to_dict_with_error(self, tmp_path):
+        """Convert when kor exists but has an error."""
         fs = FileStatus(
             file_path=tmp_path / "x.txt",
             kor_path=tmp_path / ".filekor" / "x.txt.kor",
             exists=True,
             error="parse failed",
         )
-        result = summarize(fs)
+        result = file_status_to_dict(fs)
 
         assert result["kor_exists"] is True
         assert result["error"] == "parse failed"
         assert "name" not in result
 
-    def test_summarize_complete(self, tmp_path):
-        """Summarize a fully loaded sidecar."""
+    def test_file_status_to_dict_complete(self, tmp_path):
+        """Convert a fully loaded sidecar."""
         sidecar = _make_sidecar("doc.txt", sha="deadbeef")
         fs = FileStatus(
             file_path=tmp_path / "doc.txt",
@@ -235,7 +235,7 @@ class TestSummarize:
             exists=True,
             sidecar=sidecar,
         )
-        result = summarize(fs)
+        result = file_status_to_dict(fs)
 
         assert result["kor_exists"] is True
         assert result["name"] == "doc.txt"
@@ -243,7 +243,7 @@ class TestSummarize:
         assert result["labels"] == ["finance"]
         assert result["parser_status"] == "OK"
 
-    def test_summarize_no_labels(self, tmp_path):
+    def test_file_status_to_dict_no_labels(self, tmp_path):
         """Sidecar with no labels returns empty list."""
         sidecar = _make_sidecar("doc.txt")
         sidecar.labels = None
@@ -253,6 +253,6 @@ class TestSummarize:
             exists=True,
             sidecar=sidecar,
         )
-        result = summarize(fs)
+        result = file_status_to_dict(fs)
 
         assert result["labels"] == []

@@ -7,8 +7,7 @@ import click
 from rich.table import Table
 
 from filekor.cli.base import console
-from filekor.core.status import get_file_status, get_directory_status, summarize
-from filekor.core.events import create_emitter
+from filekor.core.status import get_file_status, get_directory_status
 
 
 @click.command()
@@ -21,22 +20,15 @@ from filekor.core.events import create_emitter
     default=False,
     help="Show status for directory",
 )
-@click.option(
-    "--watch",
-    is_flag=True,
-    default=False,
-    help="Watch mode for real-time updates",
-)
-def status(path: str, directory: bool, watch: bool) -> None:
+def status(path: str, directory: bool) -> None:
     """Show status of .kor files for a file or directory.
 
     Args:
         path: Path to file or directory.
         directory: Whether to show status for directory.
-        watch: Enable watch mode for real-time updates.
     """
     if directory or Path(path).is_dir():
-        _status_directory(path, watch)
+        _status_directory(path)
     else:
         _status_file(path)
 
@@ -49,9 +41,10 @@ def _status_file(file_path: str) -> None:
         console.print(f"[red]Error: File not found: {file_path}[/red]")
         sys.exit(2)
 
-    if not status.exists:
+    # Check if file has any status (DB or filesystem)
+    if not status.exists and not status.in_db:
         console.print(
-            f"[yellow]No .kor file found for {status.file_path.name}[/yellow]"
+            f"[red]No .kor file found for {status.file_path.name}[/red]"
         )
         console.print(f"Expected at: {status.kor_path}")
         console.print("Run 'filekor sidecar' to generate one.")
@@ -60,6 +53,12 @@ def _status_file(file_path: str) -> None:
     if status.error:
         console.print(f"[red]Error loading .kor: {status.error}[/red]")
         sys.exit(1)
+
+    # Show indicator
+    if status.in_db:
+        console.print("[green]OK[/green] File indexed in database")
+    elif status.exists:
+        console.print("[green]OK[/green] .kor file found")
 
     sidecar = status.sidecar
 
@@ -74,7 +73,7 @@ def _status_file(file_path: str) -> None:
     table.add_row("Size", f"{sidecar.file.size_bytes} bytes")
     table.add_row("Modified", str(sidecar.file.modified_at))
     table.add_row("SHA256", sidecar.file.hash_sha256[:16] + "...")
-    table.add_row("Status", sidecar.parser_status)
+    table.add_row("In DB", "Yes" if status.in_db else "No")
 
     if sidecar.metadata:
         if sidecar.metadata.author:
@@ -94,7 +93,7 @@ def _status_file(file_path: str) -> None:
     console.print(table)
 
 
-def _status_directory(directory: str, watch: bool) -> None:
+def _status_directory(directory: str) -> None:
     """Show status for all .kor files in a directory using status module."""
     dir_path = Path(directory)
     if not dir_path.is_dir():
@@ -103,44 +102,46 @@ def _status_directory(directory: str, watch: bool) -> None:
 
     status = get_directory_status(directory, recursive=True)
 
-    emitter = create_emitter(watch=watch)
-    emitter.status(
-        directory,
-        [str(s.file_path) for s in status.file_statuses],
-        [str(s.kor_path) for s in status.file_statuses if s.exists],
-    )
-
     console.print(f"\n[bold]Directory:[/bold] {directory}")
     console.print(f"[blue]Supported files:[/blue] {status.total_files}")
-    console.print(f"[green].kor files:[/green] {status.kor_files}")
 
+    # Show all files with status (DB or FS)
     if status.file_statuses:
-        kor_statuses = [s for s in status.file_statuses if s.exists]
-        if kor_statuses:
-            console.print("\n[bold].kor Files:[/bold]")
-            for file_status in kor_statuses:
+        console.print("\n[bold].kor Files:[/bold]")
+        for file_status in status.file_statuses:
+            if file_status.in_db or file_status.exists:
                 try:
-                    if file_status.sidecar:
-                        labels_str = ""
-                        if (
-                            file_status.sidecar.labels
-                            and file_status.sidecar.labels.suggested
-                        ):
-                            labels_str = (
-                                f" [{', '.join(file_status.sidecar.labels.suggested)}]"
-                            )
-                        console.print(
-                            f"  [green]OK[/green] {file_status.kor_path.name}{labels_str}"
-                        )
+                    # Determine status indicator
+                    if file_status.in_db and file_status.exists:
+                        indicator = "[green]OK[/green]"
+                        source = "[DB+FS]"
+                    elif file_status.in_db:
+                        indicator = "[yellow]DB[/yellow]"
+                        source = "[DB only]"
                     else:
-                        console.print(
-                            f"  [yellow]LOAD[/yellow] {file_status.kor_path.name}"
+                        indicator = "[green]OK[/green]"
+                        source = ""
+
+                    # Get labels if available
+                    labels_str = ""
+                    if (
+                        file_status.sidecar
+                        and file_status.sidecar.labels
+                        and file_status.sidecar.labels.suggested
+                    ):
+                        labels_str = (
+                            f" [{', '.join(file_status.sidecar.labels.suggested)}]"
                         )
-                except Exception:
+
                     console.print(
-                        f"  [red]FAIL[/red] {file_status.kor_path.name} (corrupted)"
+                        f"  {indicator} {file_status.file_path.name} {source}{labels_str}"
+                    )
+                except Exception as e:
+                    console.print(
+                        f"  [red]FAIL[/red] {file_status.file_path.name} ({e})"
                     )
 
+        # Show files that are neither in DB nor in filesystem
         if status.files_without_kor:
             console.print("\n[yellow]Files without .kor:[/yellow]")
             for f in status.files_without_kor:

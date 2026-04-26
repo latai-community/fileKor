@@ -149,8 +149,9 @@ Status information for a single file.
 |-------|------|-------------|
 | `file_path` | `Path` | Path to the source file |
 | `kor_path` | `Path` | Expected path to .kor sidecar |
-| `exists` | `bool` | Whether .kor file exists and is valid |
-| `sidecar` | `Optional[Sidecar]` | Loaded Sidecar (if exists) |
+| `exists` | `bool` | Whether .kor file exists in filesystem |
+| `in_db` | `bool` | Whether file is indexed in database |
+| `sidecar` | `Optional[Sidecar]` | Loaded Sidecar (from DB or filesystem) |
 | `error` | `Optional[str]` | Error message if loading failed |
 
 ### DirectoryStatus
@@ -161,9 +162,10 @@ Status information for a directory.
 |-------|------|-------------|
 | `directory` | `Path` | Directory path |
 | `total_files` | `int` | Total supported files found |
-| `kor_files` | `int` | Files with valid .kor sidecars |
-| `files_without_kor` | `List[Path]` | Files missing .kor sidecars |
+| `kor_files` | `int` | .kor files found in filesystem |
+| `files_without_kor` | `List[Path]` | Files without .kor (neither in DB nor filesystem) |
 | `file_statuses` | `List[FileStatus]` | Per-file status list |
+| `indexed_in_db` | `int` | Files indexed in database |
 
 ### DBFile
 
@@ -1289,14 +1291,15 @@ Check file and directory processing status.
 
 ### get_file_status()
 
-Get status for a single file.
+Get status for a single file. Uses database as primary source when indexed.
 
 ```python
 from filekor.status import get_file_status
 
 status = get_file_status("./document.pdf")
 
-print(f"Has .kor: {status.exists}")
+print(f"In filesystem: {status.exists}")
+print(f"In database: {status.in_db}")
 if status.sidecar:
     print(f"Labels: {status.sidecar.labels.suggested}")
 if status.error:
@@ -1315,7 +1318,7 @@ if status.error:
 
 ### get_directory_status()
 
-Get status for all files in a directory.
+Get status for all files in a directory. Uses database as primary source when indexed.
 
 ```python
 from filekor.status import get_directory_status
@@ -1323,12 +1326,14 @@ from filekor.status import get_directory_status
 status = get_directory_status("./docs", recursive=True, max_depth=2)
 
 print(f"Total: {status.total_files}")
-print(f"With .kor: {status.kor_files}")
-print(f"Missing: {len(status.files_without_kor)}")
+print(f"Indexed in DB: {status.indexed_in_db}")
+print(f"In filesystem: {status.kor_files}")
+print(f"Without .kor: {len(status.files_without_kor)}")
 
 for fs in status.file_statuses:
-    icon = "✓" if fs.exists else "✗"
-    print(f"  {icon} {fs.file_path.name}")
+    in_db = "DB " if fs.in_db else ""
+    in_fs = "FS " if fs.exists else ""
+    print(f"  {fs.file_path.name} [{in_db}{in_fs}]")
 ```
 
 **Parameters:**
@@ -1343,15 +1348,15 @@ for fs in status.file_statuses:
 
 ---
 
-### summarize()
+### file_status_to_dict()
 
-Create a lightweight summary dict from a `FileStatus`.
+Convert a `FileStatus` to a dictionary for programmatic use.
 
 ```python
-from filekor.status import get_file_status, summarize
+from filekor import get_file_status, file_status_to_dict
 
 status = get_file_status("./document.pdf")
-summary = summarize(status)
+status_dict = file_status_to_dict(status)
 # {'file': './document.pdf', 'kor_exists': True, 'name': 'document.pdf', ...}
 ```
 
@@ -1359,7 +1364,7 @@ summary = summarize(status)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `s` | `FileStatus` | required | FileStatus to summarize |
+| `s` | `FileStatus` | required | FileStatus to convert |
 
 **Returns:** `Dict` with keys: `file`, `kor_exists`, and (if exists) `name`, `size_bytes`, `labels`, `parser_status`.
 
@@ -1595,7 +1600,7 @@ filekor:
 |----------|-------------|
 | `get_file_status(file_path)` | Single file status |
 | `get_directory_status(directory, recursive?, max_depth?)` | Directory status |
-| `summarize(file_status)` | Lightweight status summary dict |
+| `file_status_to_dict(file_status)` | Convert FileStatus to dict |
 
 ### Hasher
 

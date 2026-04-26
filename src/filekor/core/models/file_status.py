@@ -15,7 +15,8 @@ class FileStatus:
     Attributes:
         file_path: Path to the source file.
         kor_path: Path to the .kor sidecar file.
-        exists: Whether the .kor file exists.
+        exists: Whether the .kor file exists in filesystem.
+        in_db: Whether the file is indexed in database.
         sidecar: Loaded Sidecar instance (optional).
         error: Error message if loading failed (optional).
     """
@@ -23,6 +24,7 @@ class FileStatus:
     file_path: Path
     kor_path: Path
     exists: bool
+    in_db: bool = False
     sidecar: Optional["Sidecar"] = None
     error: Optional[str] = None
 
@@ -34,9 +36,10 @@ class DirectoryStatus:
     Attributes:
         directory: Path to the directory.
         total_files: Total number of supported files found.
-        kor_files: Total number of .kor files found.
+        kor_files: Total number of .kor files found in filesystem.
         files_without_kor: List of files that don't have .kor files.
         file_statuses: List of FileStatus for each file.
+        indexed_in_db: Total number of files indexed in database.
     """
 
     directory: Path
@@ -44,3 +47,4 @@ class DirectoryStatus:
     kor_files: int
     files_without_kor: list[Path]
     file_statuses: list[FileStatus]
+    indexed_in_db: int = 0

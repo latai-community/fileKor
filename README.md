@@ -22,25 +22,6 @@ uv venv
 source venv/bin/activate
 
 uv pip install -e .
-
-# CLI Usage
-filekor extract documento.pdf
-filekor sidecar documento.pdf
-filekor sidecar ./documentos --dir           # Process directory (generates merged.kor by default)
-filekor sidecar ./documentos --dir --no-merge # Generate individual .kor files
-filekor sidecar ./documentos --dir --db     # Use database to regenerate when available
-filekor sidecar ./documentos --dir --labels # Add labels via LLM
-filekor sidecar ./documentos --dir --summary   # Add summaries via LLM (short + long)
-filekor sidecar ./documentos --dir --summary=short # Add only short summary
-filekor labels documento.pdf
-filekor summary documento.pdf         # Generate summaries with LLM
-filekor sync documento.kor          # Sync existing .kor to database
-filekor merge ./directorio         # Merge multiple .kor files
-filekor list ./directorio          # List all .kor files (includes merged by default)
-filekor list ./directorio -f json  # Output as JSON with full hashes
-filekor list ./directorio -f csv   # Output as CSV with full hashes
-filekor delete --path ./doc.pdf    # Delete by path
-filekor delete --sha <hash>        # Delete by SHA256
 ```
 
 ## Library Usage

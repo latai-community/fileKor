@@ -132,3 +132,16 @@ from filekor.core.processor import process_directory
 
 - **exiftool** — required for metadata extraction. Tests that need it mock `PyExifToolAdapter.is_available`.
 - **pypdf** — optional, for PDF text extraction. `HAS_PYPDF` flag controls fallback.
+
+## Changelog
+
+When making significant changes (new features, breaking changes, bug fixes, etc.), document them in `CHANGELOG.md`:
+
+- Use [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format
+- Add entries under `[Unreleased]` section with headings: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`
+- Include: feature/fix description, affected files, and any breaking changes
+- Examples:
+  - `### Added` - for new features
+  - `### Changed` - for behavior changes
+  - `### Fixed` - for bug fixes
+  - `### Removed` - for deprecated features

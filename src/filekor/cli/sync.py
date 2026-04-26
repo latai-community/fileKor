@@ -44,12 +44,9 @@ def sync(path: str, directory: bool, verbose: bool) -> None:
     """
     if directory or Path(path).is_dir():
         dir_path = Path(path)
-        kor_files = list(dir_path.glob("**/*.kor"))
 
-        # Filter out .filekor dirs unless the target IS a .filekor dir
-        is_filekor_dir = FILEKOR_DIR in dir_path.parts
-        if not is_filekor_dir:
-            kor_files = [f for f in kor_files if FILEKOR_DIR not in f.parts]
+        # Find all .kor files including those in .filekor/ subdirectories
+        kor_files = list(dir_path.glob("**/*.kor"))
 
         if not kor_files:
             console.print(f"[yellow]No .kor files found in {path}[/yellow]")
